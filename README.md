@@ -1,4 +1,4 @@
-# RainLag
+# RainCheck
 
 **Rain-Aware Urban Traffic Delay Prediction**
 *A distributed big-data pipeline coupling multi-city loop-detector traffic states with GAN-downscaled ERA5 precipitation.*
@@ -9,7 +9,7 @@
 
 Rainfall measurably degrades urban road performance, but the degradation is not uniform — it varies with rainfall intensity, road functional class, time of day, existing congestion, and whether the rain is the first after a dry spell. Commercial platforms (Google's Roads Management Insights, Lepton's TraffiCure) have started quantifying this, but they're closed systems, restricted to verified public-sector customers and locked to the territory they manage.
 
-**RainLag** is an open, reproducible, end-to-end big-data pipeline that quantifies and predicts rain-induced traffic delay at network scale, built entirely on openly licensed data.
+**RainCheck** is an open, reproducible, end-to-end big-data pipeline that quantifies and predicts rain-induced traffic delay at network scale, built entirely on openly licensed data.
 
 ## Why Not Just Poll a Maps API?
 
@@ -19,7 +19,7 @@ Polling a commercial routing API for a speed history was investigated and reject
 - **Data shape** — traffic is returned as a three-level ordinal (`NORMAL`/`SLOW`/`TRAFFIC_JAM`), not a numeric speed, and the historical-typical baseline already has rain averaged into it, structurally biasing any rain-delay estimate toward zero.
 - **Cost** — traffic-aware requests run ~$10/1,000 calls; polling 500 corridors at 5-minute cadence is ≈$43,000/month.
 
-RainLag instead builds its analytical corpus from open research data, reserving commercial live feeds strictly for optional, non-persisted display.
+RainCheck instead builds its analytical corpus from open research data, reserving commercial live feeds strictly for optional, non-persisted display.
 
 ## Data Sources
 
