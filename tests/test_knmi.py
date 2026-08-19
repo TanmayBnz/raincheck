@@ -17,8 +17,11 @@ from raincheck.knmi import (
     ADJUSTED_5MIN,
     REALTIME_TAR,
     coverage_of,
+    GRID_COLUMNS,
+    GRID_ROWS,
     decode_precipitation,
     list_files,
+    radar_cell,
     select_files,
     to_mm_per_hour,
 )
@@ -135,3 +138,30 @@ def test_five_minute_accumulation_converts_to_an_intensity_rate():
 
     assert rate[0, 0] == pytest.approx(30.0)
     assert np.isnan(rate[0, 1])
+
+
+def test_grid_corners_from_the_files_own_metadata_map_to_grid_corners():
+    # geo_product_corners in every file gives four lon/lat pairs. Under the
+    # file's own projection and offsets they must land exactly on the grid
+    # corners, so this validates the row/col convention against the source
+    # rather than against my reading of it. Corner order is LL, UL, UR, LR and
+    # the far edges are exclusive, so a corner point sits just outside.
+    # geo_product_corners is rounded to six decimals, which puts the stored
+    # upper-left corner about 5 m north of the true grid edge - so the corner
+    # itself reads as outside while anything actually inside resolves to row 0.
+    # Worth pinning: a half-pixel fudge to "fix" this would mask genuinely
+    # out-of-domain detectors.
+    assert radar_cell(55.973602, 0.0) is None                # stored UL corner
+    assert radar_cell(55.9730, 0.001) == (0, 0)              # ~65 m inside
+    assert radar_cell(49.362064, 0.0) == (764, 0)            # stored LL corner
+
+
+def test_a_dutch_location_lands_inside_the_grid_and_a_british_one_does_not():
+    # Amsterdam must be well inside the 765x700 domain; London is west of
+    # longitude 0, which puts it at negative x - outside the grid entirely.
+    amsterdam = radar_cell(52.3676, 4.9041)
+    assert amsterdam is not None
+    row, col = amsterdam
+    assert 0 <= row < GRID_ROWS and 0 <= col < GRID_COLUMNS
+
+    assert radar_cell(51.5072, -0.1276) is None

@@ -1,6 +1,7 @@
 from pyspark.sql import functions as F
 
 from raincheck.rain import (
+    RADAR_BAND_EDGES,
     add_rain_hour,
     assign_grid_cell,
     join_rain,
@@ -146,3 +147,39 @@ def test_measurements_join_to_the_era5_hour_containing_their_bin(spark):
     # Left join: a measurement outside the ERA5 record keeps its row.
     assert result["m2"]["rain_mm_h"] is None
     assert len(result) == 2
+
+
+def test_band_edges_are_per_rung_and_radar_needs_an_extra_tier(spark):
+    # ERA5's edges (1/4/10 mm/h) top out at "very_heavy" above 10, which was
+    # empty across the whole European corpus. Radar reaches 65.6 mm/h in a single
+    # frame, so everything from 10 upward would collapse into one band. The
+    # radar edges add a 30 mm/h tier, and the top band is named per rung.
+    df = spark.createDataFrame(
+        [(0.05,), (2.0,), (6.0,), (20.0,), (45.0,)], ["rain_mm_h"])
+
+    banded = with_rain_band(df, edges=RADAR_BAND_EDGES, top="extreme")
+
+    assert [r.rain_band for r in banded.collect()] == [
+        "none", "moderate", "heavy", "very_heavy", "extreme"]
+
+
+def test_default_band_edges_are_unchanged_for_the_era5_rung(spark):
+    df = spark.createDataFrame([(0.05,), (2.0,), (6.0,), (20.0,)], ["rain_mm_h"])
+
+    assert [r.rain_band for r in with_rain_band(df).collect()] == [
+        "none", "moderate", "heavy", "very_heavy"]
+
+
+def test_unmatched_rainfall_is_not_silently_classified_as_the_heaviest_band(spark):
+    # _band walks the edges with when(intensity < edge); a null intensity makes
+    # every comparison null, so the row falls through to the top band. On the
+    # first real radar join that put 20,621 bins with NO rainfall data into
+    # "extreme" - 8.73% of the corpus, more than heavy and moderate combined,
+    # and physically impossible. A missing measurement must stay missing.
+    df = spark.createDataFrame(
+        [(None,), (0.05,), (45.0,)], "rain_mm_h double")
+
+    bands = [r.rain_band for r in
+             with_rain_band(df, edges=RADAR_BAND_EDGES, top="extreme").collect()]
+
+    assert bands == [None, "none", "extreme"]

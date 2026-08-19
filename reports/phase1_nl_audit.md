@@ -352,3 +352,77 @@ floor, not an estimate**.
 This is the third instance of the same failure mode in this data source, after NDW's `-1` and
 KNMI's `65534/65535`: a sentinel or absent value sharing a numeric field with real measurements, and
 corrupting an aggregate rather than raising. It is worth assuming a fourth exists.
+
+## 12. L2b first rain join — radar at 5 min / 1 km
+
+`scripts/fetch_knmi.sh` + `scripts/run_rain_join_ndw.sh` over 70 minutes of live
+harvest (2026-08-19 08:50–10:00 UTC), which happened to be a **wet** period.
+
+**All 20,519 detectors fall inside the radar grid (100%).** 215,621 of 236,140 bins matched
+rainfall (91.31%); the 20,519 unmatched are exactly one frame's worth of detectors — a single
+radar frame that had not yet published.
+
+### The intensity range, against the European arm
+
+| Band (mm/h) | European arm, ERA5, **4 months** | NL arm, radar, **70 minutes** |
+|---|---|---|
+| `heavy` (4–10) | **1 hour**, unusable | **2,798 bins** |
+| `very_heavy` (10–30) | **empty** | **1,470 bins** |
+| `extreme` (>30) | n/a — unreachable | **102 bins** |
+
+Distribution is monotonic and physical: none 61.2%, light 23.5%, moderate 4.7%, heavy 1.2%,
+very_heavy 0.6%, extreme 0.04%. **Seventy minutes of radar contains 4,370 observations above
+10 mm/h; four months of ERA5 contained none.** The resolution argument is settled.
+
+### The missingness bias is real, and now measured
+
+| Rain band | mean sample support | retained at w ≥ 5 |
+|---|---|---|
+| none | 9.91 | **65.7%** |
+| light | 9.98 | 65.3% |
+| moderate | 8.58 | 58.0% |
+| heavy | 7.48 | 50.6% |
+| very_heavy | 7.65 | 59.3% |
+| **extreme** | **5.11** | **47.1%** |
+
+Sample support **falls as rain intensity rises** — mean vehicles per bin drops from 9.9 dry to 5.1
+in extreme rain, and a threshold of five vehicles keeps 66% of dry bins against 47% of extreme
+ones. This is the predicted mechanism confirmed: rain suppresses traffic volume, so heavier rain
+produces thinner observations, and **any minimum-`n` filter deletes rain preferentially**.
+
+Note that `speed_null` does *not* rise with rain (12.4% dry vs 10.8% extreme). The bias operates
+through **support**, not through availability.
+
+### Raw speed by band is uninterpretable — and that vindicates the baseline design
+
+Mean speed per band at three thresholds:
+
+| Threshold | none | light | moderate | heavy | very_heavy | extreme |
+|---|---|---|---|---|---|---|
+| w ≥ 1 | 89.97 | 90.06 | 89.84 | 92.40 | 93.99 | 101.33 |
+| w ≥ 5 | 87.12 | 86.99 | 86.31 | 87.13 | 91.35 | 97.61 |
+| w ≥ 20 | 74.11 | 75.06 | 71.68 | 75.79 | 73.69 | 87.48 |
+
+Two things are visible, and both are artefacts rather than effects:
+
+1. **Rain appears to make traffic faster** at every threshold — the same non-physical result the
+   European arm produced. Radar did not fix it, because it was never a rainfall-resolution problem.
+2. **Mean speed collapses with the threshold for every band** (≈90 → 87 → 74). The threshold
+   selects for *volume*, volume selects for *congestion*, and congestion dominates the rain signal
+   entirely.
+
+That is the confound: `quality_weight` ∝ flow ∝ congestion. Rain reduces volume, which selects
+free-flowing bins, which makes rain look fast. **Comparing raw speeds across rain bands cannot
+work, at any rainfall resolution.**
+
+This is precisely why the project's target is `typical_deviation` — deviation from the *dry,
+per-segment, per-hour* profile — rather than raw speed. L2a is not a preliminary step to get past;
+it is the component that removes this confound. No dose-response number from this corpus should be
+quoted before it exists.
+
+### Scope
+
+Seventy minutes, one weather system, one morning. Nothing here generalises as an effect estimate.
+What it does establish: the acquisition path works end to end, radar restores the intensity range
+that ERA5 destroyed, the missingness bias is real and measurable, and the confound structure is
+now known before any modelling has been done.

@@ -21,8 +21,17 @@ GRID_DEG = 0.25
 # against, so "wet" needs a floor.
 WET_THRESHOLD_MM_H = 0.1
 
-# Hourly intensity bands for the interpretable dose-response model.
+# Intensity bands for the interpretable dose-response model. **Per rung**: edges
+# tuned to one rainfall product do not transfer to another.
+#
+# BAND_EDGES was calibrated against raw ERA5, whose 28 km hourly means capped the
+# whole European corpus at 4.26 mm/h - so `heavy` held one unusable hour and
+# `very_heavy` was empty. A single 5-minute radar frame reaches 65.6 mm/h with
+# p99.9 at 14.2, so under these edges everything from 10 mm/h upward would
+# collapse into one band. RADAR_BAND_EDGES adds the tier that separation needs.
 BAND_EDGES = ((1.0, "light"), (4.0, "moderate"), (10.0, "heavy"))
+RADAR_BAND_EDGES = (
+    (1.0, "light"), (4.0, "moderate"), (10.0, "heavy"), (30.0, "very_heavy"))
 BAND_TOP = "very_heavy"
 BAND_NONE = "none"
 
@@ -45,15 +54,22 @@ def add_rain_hour(df: DataFrame) -> DataFrame:
     )
 
 
-def _band(intensity: Column) -> Column:
-    band = F.lit(BAND_TOP)
-    for edge, name in reversed(BAND_EDGES):
+def _band(intensity: Column, edges=BAND_EDGES, top: str = BAND_TOP) -> Column:
+    band = F.lit(top)
+    for edge, name in reversed(edges):
         band = F.when(intensity < edge, F.lit(name)).otherwise(band)
-    return F.when(intensity < WET_THRESHOLD_MM_H, F.lit(BAND_NONE)).otherwise(band)
+    banded = F.when(intensity < WET_THRESHOLD_MM_H, F.lit(BAND_NONE)).otherwise(band)
+    # A null intensity makes every comparison above null, so without this guard
+    # the row falls through to the *heaviest* band. On the first radar join that
+    # placed 20,621 bins with no rainfall data into "extreme" - 8.73% of the
+    # corpus and more than heavy and moderate combined. Missing stays missing.
+    return F.when(intensity.isNull(), F.lit(None).cast("string")).otherwise(banded)
 
 
-def with_rain_band(df: DataFrame, column: str = "rain_mm_h") -> DataFrame:
-    return df.withColumn("rain_band", _band(F.col(column)))
+def with_rain_band(df: DataFrame, column: str = "rain_mm_h",
+                   edges=BAND_EDGES, top: str = BAND_TOP) -> DataFrame:
+    """Assign an intensity band. Pass ``edges``/``top`` per rung - see BAND_EDGES."""
+    return df.withColumn("rain_band", _band(F.col(column), edges, top))
 
 
 # Hours of lookback used to decide whether the road surface is dry. Rain stops

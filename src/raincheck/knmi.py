@@ -168,3 +168,47 @@ def to_mm_per_hour(millimetres, minutes: int = ACCUMULATION_MINUTES):
     feature and every entry in BAND_EDGES is defined in mm/h.
     """
     return np.asarray(millimetres, dtype="float64") * (60.0 / minutes)
+
+
+# From the file's own geographic attributes. Pixel (0, 0) is the upper-left
+# corner, at projection coordinates (COLUMN_OFFSET, -ROW_OFFSET) in km.
+COLUMN_OFFSET = 0.0
+ROW_OFFSET = 3650.0
+
+
+def _transformer():
+    """Lazily built WGS84 -> radar-projection transformer (pyproj caches CRSs)."""
+    global _TRANSFORMER
+    try:
+        return _TRANSFORMER
+    except NameError:
+        from pyproj import Transformer
+
+        _TRANSFORMER = Transformer.from_crs("EPSG:4326", PROJ4, always_xy=True)
+        return _TRANSFORMER
+
+
+def radar_cells(lats, lons):
+    """Vectorised (row, col) for WGS84 coordinates; -1 where outside the grid.
+
+    Detectors are projected onto the radar grid rather than the grid being
+    unprojected to lat/lon: there are 20,519 detectors against 535,500 pixels per
+    frame, so this direction is ~26x less work and involves no resampling error.
+
+    Verified against each file's own ``geo_product_corners``, which map to the
+    grid corners exactly under this convention.
+    """
+    x, y = _transformer().transform(np.asarray(lons), np.asarray(lats))
+    row = np.floor(-(ROW_OFFSET + np.asarray(y))).astype("int64")
+    col = np.floor(np.asarray(x) - COLUMN_OFFSET).astype("int64")
+
+    outside = (row < 0) | (row >= GRID_ROWS) | (col < 0) | (col >= GRID_COLUMNS)
+    return np.where(outside, -1, row), np.where(outside, -1, col)
+
+
+def radar_cell(lat: float, lon: float) -> tuple[int, int] | None:
+    """(row, col) of one WGS84 point, or None if it falls outside the grid."""
+    rows, cols = radar_cells([lat], [lon])
+    if rows[0] < 0:
+        return None
+    return int(rows[0]), int(cols[0])
