@@ -426,3 +426,95 @@ Seventy minutes, one weather system, one morning. Nothing here generalises as an
 What it does establish: the acquisition path works end to end, radar restores the intensity range
 that ERA5 destroyed, the missingness bias is real and measurable, and the confound structure is
 now known before any modelling has been done.
+
+## 13. Travel time — granularity, and why it carries the monitoring layer
+
+`traveltime.xml.gz`, probed live 2026-08-19. **80,709 sections**, one DATEX II
+`TravelTimeData` value each, matching the `ItineraryByIndexedLocations` count exactly.
+
+| Property | Loop speed | Travel time |
+|---|---|---|
+| Temporal granularity | 60 s | **60 s** (`period = 60.0`) |
+| Spatial units | 20,519 points | **80,709 sections** (3.9×) |
+| Spatial extent | a point | median **445 m** (p25 285, p75 653) |
+| Valid values | 84.8% | **95.9%** |
+| Published reference value | none | **87.2% carry one** |
+| Sample support | median **4 vehicles** | median **99**, max 100 |
+
+Total instrumented network: **110,940 km**. Length is skewed — p95 4.2 km, max 171 km — so long
+corridors must be excluded from any dose-response or they average the signal away.
+
+### It is a different sensor, not a re-aggregation
+
+`measurementEquipmentTypeUsed` on the sections:
+
+| Equipment | Sections | Independent of the loops? |
+|---|---|---|
+| `fcd` (floating car data) | **73,003 (90.5%)** | **yes** |
+| `lus` (loop-derived) | 7,373 (9.1%) | **no** |
+| `anpr` (number plate) | 333 (0.4%) | yes |
+
+The 7,373 loop-derived sections are exactly the records that carried
+`allLanesCompleteCarriageway` and `movingAverageOfSamples` in §2 — the counts match. They must be
+excluded whenever travel time is treated as independent corroboration, or the two series
+double-count. `Section.is_loop_derived` flags them.
+
+So the project gains a **second, independent measurement of the same network**. Two sensors
+agreeing on a rain effect is a far stronger claim than either alone, and it is evidence the
+European arm could never produce.
+
+### Why this weakens the confound of §12
+
+§12 found raw loop speed uninterpretable because `quality_weight` ∝ flow ∝ congestion, so
+filtering on support selected free-flowing bins and rain looked *fast*. Travel-time support has
+median 99 and max 100 — almost certainly a **completeness percentage, not a vehicle count** — so
+it is high and near-uniform, and the selection pressure largely disappears.
+
+**Caution: same attribute name, different semantics.** `numberOfInputValuesUsed` is a vehicle
+count on the speed feed and a percentage here. Pooling the two would be silently wrong.
+
+It does **not** remove the need for dry-baseline profiles: even a perfect free-flow reference does
+not control for time-of-day demand.
+
+### The published reference is not a free-flow ceiling
+
+100% of references are `referenceValueType = staticReferenceValue`. Measured/reference ratio:
+
+| p1 | p5 | p25 | **p50** | p75 | p95 | p99 |
+|---|---|---|---|---|---|---|
+| 0.751 | 0.820 | 0.932 | **1.064** | 1.217 | 1.683 | 2.327 |
+
+**33.7% of sections are faster than their own reference** (min 0.43). So it cannot be treated as
+free-flow. Two readings remain open: a speed-limit-derived static value on roads where drivers
+exceed limits (clean), or a historical-typical baseline (the defect that disqualified Google's
+`staticDuration` in §3). Supporting evidence for the former: derived reference speeds cluster
+tightly at the top — p95 115.2 km/h, p99 115.4 — which is what a posted-limit cap looks like, not
+a demand-weighted average.
+
+**Decisive test still to run:** fetch at 03:00 and at peak and check whether a section's reference
+duration is unchanged. Until then the reference is carried alongside the derived free-flow, never
+merged into it.
+
+### Derived speeds are physical
+
+`length_m × 3.6 / duration_s`, over 77,427 valid sections:
+
+| p1 | p5 | p25 | p50 | p75 | p95 | p99 |
+|---|---|---|---|---|---|---|
+| 18.7 | 26.8 | 41.3 | **59.5** | 90.2 | 105.2 | 110.1 |
+
+Only 8 rows (0.01%) exceed 200 km/h, handled by the existing `clean_speed` 150 km/h cap. The
+join between travel times and the sections dimension is **100%**.
+
+### Monitoring layer status
+
+`scripts/run_monitor_ndw.sh` runs end to end: 95.9% of observations yield a speed, p50 59.7 km/h —
+matching the standalone figures exactly. **Baselines are empty and correctly so**: free-flow and
+typical profiles need ≥30 dry observations per cell, and the harvest currently holds two frames per
+section. The harvester now captures travel time alongside speeds (80,709 sections/minute,
+~5.7 MB/min staged), so the layer becomes meaningful once each hour-of-day cell is covered — on the
+order of a day of harvest per cell.
+
+One honest gap: until L2b joins rainfall to *sections*, `is_dry_baseline` is set true for every
+interval, so these baselines are not yet dry-conditioned. The job says so in its own output rather
+than implying otherwise.

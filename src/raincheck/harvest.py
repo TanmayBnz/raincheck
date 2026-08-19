@@ -22,15 +22,19 @@ import pyarrow.parquet as pq
 class SeenWindow:
     """Remembers recently seen ``(segment_id, ts_utc)`` keys to drop duplicates."""
 
-    def __init__(self, horizon: dt.timedelta):
+    def __init__(self, horizon: dt.timedelta, key: str = "segment_id"):
+        # The travel-time feed keys on section_id rather than segment_id, so the
+        # identifying column is a parameter. Shimming one onto every row instead
+        # is easy to get wrong in the way that silently disables dedup.
         self._horizon = horizon
+        self._key = key
         self._seen: set[tuple[str, dt.datetime]] = set()
 
     def filter_new(self, rows: list[dict]) -> list[dict]:
         """Return only those rows not already seen, recording them as seen."""
         fresh = []
         for row in rows:
-            key = (row["segment_id"], row["ts_utc"])
+            key = (row[self._key], row["ts_utc"])
             if key in self._seen:
                 continue
             self._seen.add(key)
@@ -109,3 +113,18 @@ def write_rows(rows: list[dict], root: pathlib.Path,
         pq.write_table(table, path, compression="zstd")
         written.append(path)
     return written
+
+
+TRAVEL_TIME_SCHEMA = pa.schema([
+    ("source", pa.string()),
+    ("country", pa.string()),
+    ("section_id", pa.string()),
+    ("ts_utc", pa.timestamp("us")),
+    ("duration_s", pa.float64()),
+    ("reference_duration_s", pa.float64()),
+    ("travel_time_type", pa.string()),
+    ("support", pa.float64()),
+])
+"""Canonical schema for the travel-time feed, pinned for the same reason as
+NDW_SCHEMA: a quiet section can be null for a whole hour, and an inferred
+null-typed column breaks the partitioned read."""

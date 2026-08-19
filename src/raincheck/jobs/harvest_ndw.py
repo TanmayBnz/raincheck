@@ -24,10 +24,12 @@ import time
 import urllib.request
 
 from raincheck import paths
-from raincheck.harvest import SeenWindow, write_rows
+from raincheck.harvest import TRAVEL_TIME_SCHEMA, SeenWindow, write_rows
 from raincheck.ndw import SiteTable, parse_measurements, parse_site_table
+from raincheck.travel_time import parse_travel_times
 
 TRAFFICSPEED_URL = "https://opendata.ndw.nu/trafficspeed.xml.gz"
+TRAVELTIME_URL = "https://opendata.ndw.nu/traveltime.xml.gz"
 SITE_TABLE_URL = "https://opendata.ndw.nu/measurement_current.xml.gz"
 
 FETCH_TIMEOUT_S = 120
@@ -69,6 +71,22 @@ def _parse(payload: bytes, table: SiteTable) -> list[dict]:
         return parse_measurements(handle, table)
 
 
+def harvest_travel_time(window: SeenWindow, stage: pathlib.Path) -> int:
+    """Fetch and persist one minute of section travel times.
+
+    Harvested alongside the loop speeds because it is a largely independent
+    sensor - 90.5% of sections are floating car data - and because it is the
+    only NDW series carrying a published reference value. Keyed on
+    ``section_id``, so it needs its own dedup window.
+    """
+    payload = _fetch(TRAVELTIME_URL)
+    with gzip.open(io.BytesIO(payload), "rb") as handle:
+        rows = parse_travel_times(handle)
+    fresh = window.filter_new(rows)
+    write_rows(fresh, stage, schema=TRAVEL_TIME_SCHEMA)
+    return len(fresh)
+
+
 def harvest_once(table: SiteTable, window: SeenWindow,
                  stage: pathlib.Path) -> tuple[SiteTable, int]:
     """One fetch-parse-write cycle. Returns the (possibly reloaded) site table.
@@ -101,6 +119,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--interval", type=float, default=60.0,
                         help="seconds between fetches (the feed updates each minute)")
     parser.add_argument("--once", action="store_true", help="single fetch, then exit")
+    parser.add_argument("--no-travel-time", action="store_true",
+                        help="harvest loop speeds only")
     parser.add_argument("--max-fetches", type=int, default=0,
                         help="stop after this many fetches (0 = unlimited)")
     args = parser.parse_args(argv)
@@ -115,6 +135,8 @@ def main(argv: list[str] | None = None) -> int:
 
     table = _load_site_table()
     window = SeenWindow(horizon=DEDUP_HORIZON)
+    travel_window = SeenWindow(horizon=DEDUP_HORIZON, key="section_id")
+    travel_stage = args.stage.parent / "traveltime"
     limit = 1 if args.once else args.max_fetches
     fetches = total = 0
 
@@ -123,6 +145,9 @@ def main(argv: list[str] | None = None) -> int:
         try:
             table, new_rows = harvest_once(table, window, args.stage)
             total += new_rows
+            if not args.no_travel_time:
+                fresh = harvest_travel_time(travel_window, travel_stage)
+                log.info("travel time: %d new sections", fresh)
         except Exception:                        # keep the harvest alive
             log.exception("fetch failed; retrying next interval")
         fetches += 1

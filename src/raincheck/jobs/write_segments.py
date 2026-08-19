@@ -21,8 +21,19 @@ import pyarrow.parquet as pq
 
 from raincheck import paths
 from raincheck.ndw import parse_site_table
+from raincheck.travel_time import parse_sections
 
 SITE_TABLE_URL = "https://opendata.ndw.nu/measurement_current.xml.gz"
+
+SECTION_SCHEMA = pa.schema([
+    ("section_id", pa.string()),
+    ("length_m", pa.float64()),
+    ("equipment", pa.string()),
+    ("lat", pa.float64()),
+    ("lon", pa.float64()),
+    ("n_links", pa.int64()),
+    ("is_loop_derived", pa.bool_()),
+])
 
 SCHEMA = pa.schema([
     ("segment_id", pa.string()),
@@ -45,6 +56,8 @@ def main(argv: list[str] | None = None) -> int:
     payload = urllib.request.urlopen(SITE_TABLE_URL, timeout=180).read()
     with gzip.open(io.BytesIO(payload), "rb") as handle:
         table = parse_site_table(handle)
+    with gzip.open(io.BytesIO(payload), "rb") as handle:
+        sections = parse_sections(handle)
 
     rows = [{
         "segment_id": site.site_id,
@@ -60,6 +73,24 @@ def main(argv: list[str] | None = None) -> int:
     args.output.mkdir(parents=True, exist_ok=True)
     pq.write_table(pa.Table.from_pylist(rows, schema=SCHEMA),
                    args.output / "segments.parquet", compression="zstd")
+
+    section_rows = [{
+        "section_id": s.section_id,
+        "length_m": s.length_m,
+        "equipment": s.equipment,
+        "lat": s.lat,
+        "lon": s.lon,
+        "n_links": s.n_links,
+        "is_loop_derived": s.is_loop_derived,
+    } for s in sections.values()]
+    section_out = args.output.parent / "ndw_sections"
+    section_out.mkdir(parents=True, exist_ok=True)
+    pq.write_table(pa.Table.from_pylist(section_rows, schema=SECTION_SCHEMA),
+                   section_out / "sections.parquet", compression="zstd")
+    loop_derived = sum(1 for r in section_rows if r["is_loop_derived"])
+    print(f"travel-time sections: {len(section_rows):,}"
+          f"  ({loop_derived:,} loop-derived, not independent of the speed feed)")
+    print(f"  written to {section_out}")
 
     with_frc = sum(1 for r in rows if r["frc"])
     print(f"site table version {table.version}: {len(rows):,} segments")

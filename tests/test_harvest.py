@@ -93,3 +93,14 @@ def test_an_all_null_speed_batch_still_writes_a_float_column():
     write_rows([row("A", 31, speed=None), row("B", 31, speed=None)], root)
 
     assert pq.read_table(root).schema.field("speed").type == pa.float64()
+
+
+def test_the_dedup_key_column_is_configurable():
+    # The travel-time feed is keyed on section_id, not segment_id. Without this
+    # the caller has to shim a segment_id onto every row and strip it again,
+    # which is easy to get wrong in exactly the way that silently disables dedup.
+    window = SeenWindow(horizon=dt.timedelta(minutes=10), key="section_id")
+    rows = [{"section_id": "S1", "ts_utc": dt.datetime(2026, 8, 19, 9, 0)}]
+
+    assert len(window.filter_new(list(rows))) == 1
+    assert window.filter_new(list(rows)) == []
