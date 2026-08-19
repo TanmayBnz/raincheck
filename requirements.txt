@@ -3,6 +3,7 @@
 # two competing Spark versions. See scripts/test.sh for how PYTHONPATH is wired.
 cdsapi==0.7.7
 h3==4.5.0
+h5py==3.16.0
 netCDF4==1.7.4
 pandas==3.0.5
 pyarrow==25.0.1

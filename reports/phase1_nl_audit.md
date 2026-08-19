@@ -239,7 +239,64 @@ Risk is low for the pooled dose-response, **high** for per-segment and spatial-h
 (spatial was already the worst European split at -14.4%) and for night/off-peak strata, which are
 thin by construction and are exactly where dry-spell-onset effects are expected.
 
-## 9. Consequences for the build
+## 9. KNMI radar — acquisition gate passed, and the premise confirmed
+
+Probed live with a registered key (2026-08-19). `x-ratelimit-limit: 1000` per hour confirms the
+registered tier.
+
+| Product | Packaging | Coverage | Size |
+|---|---|---|---|
+| `rad_nl25_rac_mfbs_5min` v2.0 (gauge-adjusted) | **19 annual zips** | **2008 → 2026** | **24.8 GB total** |
+| `nl_rdr_data_rtcor_5m_tar` (real-time, unadjusted) | **2,798 daily tars** | **2018-12-19 → 2026-08-18** | ~26 MB/day |
+| `nl_rdr_data_rtcor_5m` | individual HDF5 | same, ~2 min latency | ~187 KB/file |
+
+**No bulk key is needed.** Both bulk products are pre-aggregated, so the whole adjusted archive is
+19 requests and a year of real-time data is 365 — trivial against 1,000/hour. An earlier estimate
+of 8,928 requests per month assumed individual 5-minute files.
+
+**The weather side of the ladder is therefore entirely unblocked, for 2019–2026.** Only NDW history
+is gated (§6). The 2026 adjusted archive was regenerated **2026-08-12**, a one-week lag rather than
+the ~1 month the documentation suggests.
+
+### File format (verified by download)
+
+| Property | Value |
+|---|---|
+| Grid | **765 × 700**, 1 km pixels, north-to-south (`geo_pixel_size_y = -1`) |
+| Projection | polar stereographic — `+proj=stere +lat_0=90 +lon_0=0 +lat_ts=60 +a=6378137 +b=6356752 +units=km` |
+| Payload | `image1/image_data`, uint16, `image_geo_parameter = PRECIP_[MM]` |
+| Calibration | `GEO = 0.010000*PV + 0.000000` → raw × 0.01 = **mm per 5 min** |
+| **Sentinels** | **65534 = missing, 65535 = out of image** |
+| Timestamp | `product_datetime_start`/`_end`; labelled by **end** time, as ERA5 `tp` is |
+
+The sentinels are the same class of trap as NDW's `-1`: they sit in the same numeric field as real
+values, and at gain 0.01 they decode to **655.34 / 655.35 mm in five minutes**. `65535` alone
+covers **65,263 of 535,500 pixels (12.2%)** — the domain corners. Handled in
+`knmi.decode_precipitation`. Note also that files are **accumulations in mm, not mm/h**: every rain
+feature and every `BAND_EDGES` entry is in mm/h, so the ×12 conversion is load-bearing.
+
+### The premise, quantified
+
+One 5-minute frame (2026-08-19 09:20–09:25 UTC), decoded and converted:
+
+| Metric | ERA5, **entire** European corpus | KNMI radar, **one frame** |
+|---|---|---|
+| Max intensity | **4.26 mm/h** | **65.6 mm/h** |
+| p99 | — | 4.4 mm/h |
+| p99.9 | — | 14.2 mm/h |
+| p99.99 | — | 29.4 mm/h |
+
+**ERA5's maximum across 1,395,565 rows and four months is approximately radar's 99th percentile in
+a single five-minute frame.** The `heavy` (>4 mm/h) and `very_heavy` (>10 mm/h) bands — empty or
+holding one unusable hour in the European arm — are populated within five minutes of radar. This is
+direct confirmation that the European null result was caused by resolution rather than by an absent
+effect, and it is the strongest available justification for the ladder.
+
+Consequence for the build: **`BAND_EDGES` must be re-derived per rung and extended upward.** Edges
+of 1/4/10 mm/h were tuned to ERA5's smoothed drizzle; against radar they will saturate, and a band
+above ~30 mm/h is now meaningful.
+
+## 10. Consequences for the build
 
 1. `quality_weight` = `numberOfInputValuesUsed`; null on `-1` and on `dataError`.
 2. Resolve `anyVehicle` speed/flow indices **from the site table per site**; never hardcode.
