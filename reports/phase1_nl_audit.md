@@ -12,7 +12,7 @@ no API key** for the live feed. One item remains blocked (historical export, see
 | UTD19 (European arm) | NDW (Netherlands arm) |
 |---|---|
 | Speed in **9 of 39 cities**; no large German city | Speed at **20,518 of 20,519 sites (99.995%)** |
-| 40 distinct calendar days, non-simultaneous cities | Multi-year archive; ~29.5 M site-observations **per day** |
+| 40 distinct calendar days, non-simultaneous cities | Multi-year archive; **~8.3 M site-observations/day** measured (see §7) |
 | 3–5 min aggregation | **60 s** aggregation, uniformly |
 | Occupancy present but unit-inconsistent across cities | **No occupancy at all** (see §5) |
 | Road class via OSM map-matching | Coordinates for 100% of sites; FRC for only 8.9% (see §5) |
@@ -76,9 +76,14 @@ Two fields carry veracity, replacing UTD19's three-state error flag:
 
 - **`-1` is the missing-value sentinel.** It appears as a real number and *must* be nulled before
   any aggregation, or it silently destroys every mean. This is the highest-risk parse bug here.
-- **`numberOfInputValuesUsed`** — the sample size behind each value. This is a strictly better
-  quality signal than UTD19's flag: it is continuous, so it becomes `quality_weight` and feeds
-  `GBTRegressor.weightCol` directly rather than forcing a keep/drop decision.
+- **`numberOfInputValuesUsed`** — the sample size behind each value, becoming `quality_weight`.
+  Being continuous, it feeds `GBTRegressor.weightCol` directly rather than forcing a keep/drop
+  decision. **But it is present on only ~41% of rows** (259,774 of 630,250 harvested): the
+  attribute is simply absent on the majority of `averageVehicleSpeed` elements, and **313,791 rows
+  carry a valid speed with no weight at all**. An earlier reading of this as a universally
+  available signal was wrong. A missing weight means unknown support, not zero support, so L1
+  treats it as one observation and reports the share separately — weighting by the raw column
+  discards those speeds entirely (see §11).
 - `dataError` also appears (14,721 occurrences in the snapshot) and must be honoured.
 
 ## 4. Measurement indices are per-site, not fixed
@@ -309,3 +314,41 @@ above ~30 mm/h is now meaningful.
    would otherwise inflate the table five-fold.
 9. Re-bin to >=5 minutes weighted by `quality_weight` before any modelling.
 10. Deduplicate on `(segment_id, ts_utc)` — publications overlap across minutes.
+
+## 11. L1 curation — first run on harvested data
+
+`scripts/run_curate_ndw.sh` over the first hour of live harvest (2026-08-19 08:50–09:50 UTC):
+
+| Metric | Value |
+|---|---|
+| Rows in | 671,288 |
+| Distinct `(segment_id, ts_utc)` | 671,288 — **0 duplicates** |
+| 5-minute bins out | 195,102 |
+| Speed null | **13.3%** |
+| Mean vehicles per bin | 8.93 (8.61 behind speed) |
+| Mean observations per bin | 3.44 |
+| Observations with no stated sample size | **59.5%** |
+
+Zero duplicates confirms the harvester's in-process window works when it is not restarted; L1's
+dedup remains mandatory because that guarantee does not survive a restart.
+
+**Re-binning behaves as intended.** Speed-null falls from 14.2% at 1-minute grain to 13.3% at
+5-minute, and sample support per observation rises. Mean observations per bin is 3.44 rather than 5
+because not every site reports every minute.
+
+### A bug worth recording: null weights silently destroyed valid speeds
+
+The first run reported **69.98% speed-null** — *worse* than the 1-minute input, which is the
+opposite of what aggregation should do. Cause: the weighted mean was
+`sum(speed × weight) / sum(weight)`, and with `weight` null on 59% of rows those terms vanish. A bin
+whose speeds all lacked a weight collapsed to `sum(null)/sum(null)` = null.
+
+Fix: an unknown sample size counts as **one** observation (`coalesce(weight, 1)`), because unknown
+support is not zero support. Speed-null returned to 13.3%. The share of unweighted observations is
+now reported as `unknown_weight_obs`, since a bin resting entirely on unweighted speeds has a weaker
+claim to its value than the weight column alone implies — and **mean vehicles per bin is therefore a
+floor, not an estimate**.
+
+This is the third instance of the same failure mode in this data source, after NDW's `-1` and
+KNMI's `65534/65535`: a sentinel or absent value sharing a numeric field with real measurements, and
+corrupting an aggregate rather than raising. It is worth assuming a fourth exists.
