@@ -184,7 +184,15 @@ and each site's `measurementTimeDefault` gives a clean bimodal split:
 Across five consecutive one-minute harvests the slow cohort **did not advance at all** — every
 fetch after the first returned exactly 5,755 new rows and 72% duplicates (14,764 repeats). So the
 slow cohort publishes on a cycle longer than a minute; its actual cadence needs a longer
-observation to pin down. This revises the volume estimate downward (see §7) and means a
+observation to pin down.
+
+Longer observation refines this: **the publication's own row count varies.** Later fetches
+returned **5,755 rows at 0% duplicate**, not 20,519 at 72%. So the slow cohort is *absent* from
+most publications rather than being restated stale, and the fast cohort genuinely advances every
+minute. Consequences: the per-fetch duplicate rate is not a fixed 72% (it depends on whether the
+slow cohort is present), and the daily volume estimate rests on the slow cohort's still-unmeasured
+publication cadence. Dedup must therefore key on `(segment_id, ts_utc)` rather than on any
+assumption about feed size. This revises the volume estimate downward (see §7) and means a
 one-minute poll is the right cadence for the fast cohort but oversamples the slow one heavily.
 
 Consequences:
