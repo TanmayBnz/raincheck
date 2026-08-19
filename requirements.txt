@@ -1,0 +1,11 @@
+# Python libraries only. Spark is NOT listed on purpose: it comes from
+# /opt/spark (4.0.1) via spark-submit, and installing pyspark here would create
+# two competing Spark versions. See scripts/test.sh for how PYTHONPATH is wired.
+cdsapi==0.7.7
+h3==4.5.0
+netCDF4==1.7.4
+pandas==3.0.5
+pyarrow==25.0.1
+pytest==9.1.1
+tabulate==0.10.0
+xarray==2026.7.0

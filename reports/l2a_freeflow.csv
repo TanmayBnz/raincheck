@@ -1,0 +1,6 @@
+city,detectors_with_ff,mean_ff_kmh,min_ff_kmh,max_ff_kmh,mean_obs_per_detector,mean_ff_share_pct
+bolton,45,64.03,33.86,80.0,929.0,91.0
+essen,36,60.02,43.58,99.0,4600.0,85.6
+groningen,43,48.09,39.03,61.07,424.0,94.9
+manchester,147,46.58,25.0,80.0,4559.0,90.7
+rotterdam,212,52.97,33.01,85.59,1063.0,94.6

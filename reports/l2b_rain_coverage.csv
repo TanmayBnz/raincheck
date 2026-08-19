@@ -1,0 +1,7 @@
+city,rows,rain_matched_pct,wet_pct,dry_baseline_pct,max_rain_mm_h,era5_cells
+birmingham,112463,100.0,5.637,73.51,0.891,1
+bolton,51656,100.0,5.297,72.991,0.706,1
+essen,193416,100.0,30.719,41.119,4.263,1
+groningen,20586,100.0,24.332,51.214,2.599,1
+manchester,765096,100.0,29.494,41.842,2.86,1
+rotterdam,252348,100.0,15.357,59.376,0.601,2

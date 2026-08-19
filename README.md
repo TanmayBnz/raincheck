@@ -21,17 +21,38 @@ Polling a commercial routing API for a speed history was investigated and reject
 
 RainCheck instead builds its analytical corpus from open research data, reserving commercial live feeds strictly for optional, non-persisted display.
 
+## Build Status
+
+L0–L3 are implemented and have been run end to end on real data. **48 tests pass.**
+
+| Layer | Output | Result |
+|---|---|---|
+| L0 ingest | `hdfs:///raincheck/raw/` | UTD19 6.5 GB + ERA5 (4 months, 2,875,176 grid-hours) |
+| L0 audit | `reports/phase1_city_audit.md` | 39 cities, 134,380,371 rows |
+| L1 curation | `hdfs:///raincheck/curated/measurements` | 1,395,565 rows, DST-correct UTC, units normalised |
+| L2b weather | `reports/l2b_rain_coverage.md` | 100% rain-join coverage |
+| L2a baselines | `reports/l2a_baselines.md` | free-flow + dry-only profiles, dry-guard enforced |
+| L3a dose-response | `reports/dose_response.md` | light −1.8 pp, moderate +1.1 pp vs no rain |
+| L3b model | `reports/model_performance.md` | **rain ablation fails on 2 of 4 splits** |
+
+Two findings changed the project, and both are documented in [`CLAUDE.md` §0](./CLAUDE.md):
+
+1. **No German city in UTD19 reports speed.** The spateGAN in-domain argument below does not survive contact with the data; the study set is six speed-bearing cities across the UK, Netherlands and Germany (Essen only).
+2. **At raw ERA5 resolution (28 km, hourly) the rain features do not earn their place.** Maximum observed intensity across the entire corpus is 4.26 mm/h, and target noise dwarfs the effect size. This is the empirical case *for* spateGAN downscaling rather than a reason to abandon the approach.
+
+Not yet built: spateGAN downscaling, Kafka replay, Cassandra serving, the dashboard, GraphX, and fundamental-diagram speed recovery.
+
 ## Data Sources
 
 | Source | Role | Notes |
 |---|---|---|
-| **[UTD19](https://utd19.ethz.ch)** (ETH Zürich) | Traffic layer | 23,541 loop detectors, 40 cities, ~170M rows, 2017–2019 |
+| **[UTD19](https://utd19.ethz.ch)** (ETH Zürich) | Traffic layer | 23,541 loop detectors; `utd19_u.csv` holds 134M rows across 39 cities. Only 9 report speed |
 | **ERA5** (Copernicus CDS) | Weather layer | Global reanalysis precipitation, ~24–31 km / hourly |
 | **[spateGAN-ERA5](https://github.com/LGlawion/spateGAN_ERA5)** | Downscaling | Conditional GAN, ERA5 → 2 km / 10 min precipitation fields |
 | **OpenStreetMap** | Network layer | Road topology, functional class, detector-to-link map matching |
 | **TomTom Flow Segment Data** (optional) | Live demo | Display-only, never persisted |
 
-A key design synergy: spateGAN-ERA5 was trained on German gauge-adjusted radar, and UTD19 contains twelve German cities — so anchoring the primary study on Germany keeps the downscaler in-domain, the strongest defense against "unverifiable GAN rainfall" criticism. Non-German cities serve as an out-of-domain transfer test.
+> **Superseded.** The intended design synergy was to anchor on Germany, since spateGAN-ERA5 was trained on German gauge-adjusted radar and UTD19 contains twelve German cities. The audit found none of them reports speed, so this holds only for a flow/occupancy analysis via fundamental-diagram speed recovery, which is not yet built. Essen is retained as the single German in-domain check.
 
 ## Architecture
 
@@ -64,10 +85,10 @@ L4  SERVING              Cassandra · Dashboard
 ### Layer highlights
 
 - **Free-flow speed** is the 85th percentile of observed speed conditioned on occupancy below the critical threshold — not simply the max or the night-time average.
-- **Typical speed profiles** (median speed per detector × day-of-week × hour-of-day) are computed over **dry intervals only**. Including rainy intervals would let the baseline absorb the very effect the project measures — the same flaw that makes Google's `staticDuration` unsuitable for this purpose.
-- **Rain features** go beyond raw intensity: accumulation windows, time since rain onset, dry-spell antecedent (the "first rain after a dry spell" effect), ensemble spread as an uncertainty covariate, and intensity banding.
+- **Typical speed profiles** (median speed per detector × weekend-flag × hour-of-day, coarsened from day-of-week × 5-min bin because 40 days leaves ~3 observations per cell at that grain) are computed over **dry intervals only**. Including rainy intervals would let the baseline absorb the very effect the project measures — the same flaw that makes Google's `staticDuration` unsuitable for this purpose.
+- **Rain features** go beyond raw intensity: accumulation windows (1/3/6 h — hourly, since raw ERA5 cannot resolve the 10/30/60 min originally planned), time since rain onset, dry-spell antecedent (the "first rain after a dry spell" effect), and intensity banding. Ensemble spread is *not* implemented: it needs spateGAN's multi-seed members.
 - **Two prediction models**: an interpretable dose-response model (GLM / GBT with interactions across rainfall band × road class × time-of-day) for explanation, and a spatio-temporal GBT/graph model for operational forecasting.
-- **Validation** goes beyond a random split: temporal holdout, spatial holdout, event-based (rain intervals only), and cross-city transfer (German in-domain → non-German out-of-domain), benchmarked against historical mean, naïve persistence, and a rain-ablated model.
+- **Validation** goes beyond a random split: temporal holdout, spatial holdout, event-based (rain intervals only), and cross-city transfer (UK → Netherlands/Germany), benchmarked against historical mean, naïve persistence, and a rain-ablated model.
 
 ## Tech Stack
 
@@ -103,6 +124,23 @@ This project uses the UTD19 dataset (utd19.ethz.ch) under its academic and non-c
 
 > Loder, A., Ambühl, L., Menendez, M. & Axhausen, K.W. (2019). Understanding traffic capacity of urban networks. *Scientific Reports*, 9(1), 16283.
 > Glawion, L. et al. (2025). Global spatio-temporal ERA5 precipitation downscaling to km and sub-hourly scale using generative AI. *npj Climate and Atmospheric Science*, 8(1), 219.
+
+## Reproducing
+
+```bash
+python -m venv .venv && .venv/bin/pip install -r requirements.txt
+./scripts/test.sh                 # 48 tests
+/opt/hadoop/sbin/start-dfs.sh
+./scripts/run_audit.sh            # L0  Phase-1 gate
+./scripts/run_curate.sh           # L1
+./scripts/fetch_era5.sh           # L2b(i)  needs ~/.cdsapirc + accepted ERA5 licence
+./scripts/run_rain_features.sh    # L2b(ii)
+./scripts/run_baselines.sh        # L2a
+./scripts/run_dose_response.sh    # L3a
+./scripts/run_models.sh           # L3b
+```
+
+Spark comes from `/opt/spark` (4.0.1); the venv deliberately has no `pyspark` so there is only ever one Spark version in play.
 
 ## License
 

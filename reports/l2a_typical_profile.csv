@@ -1,0 +1,7 @@
+city,profile_cells,mean_obs_per_cell,min_obs,pct_cells_under_30_obs
+birmingham,1563,48.6,1,32.25
+bolton,1069,32.4,1,48.83
+essen,1728,46.0,8,19.04
+groningen,876,11.1,1,100.0
+manchester,5969,53.0,7,20.2
+rotterdam,4992,27.8,1,51.38
