@@ -1,0 +1,6 @@
+pyspark==4.2.0
+duckdb==1.5.5
+pyyaml==6.0.3
+cdsapi==0.7.7
+xarray==2025.9.0
+netCDF4==1.7.2

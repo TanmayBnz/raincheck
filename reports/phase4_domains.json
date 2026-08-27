@@ -1,0 +1,16 @@
+{
+  "essen": {
+    "centre_lat": 51.445,
+    "centre_lon": 7.025,
+    "domain_bbox": [
+      56.83,
+      -1.62,
+      46.06,
+      15.67
+    ],
+    "first_day": "2017-03-27",
+    "last_day": "2017-09-30",
+    "path": "/mnt/d/projects/rainCheck/lake/era5/domain/essen_cp_lsp.nc",
+    "size_mb": 31.9
+  }
+}

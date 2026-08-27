@@ -1,0 +1,13 @@
+{
+  "generated": "2026-08-26 12:13 UTC",
+  "cities": [
+    "manchester",
+    "torino",
+    "essen"
+  ],
+  "landed_study_rows": 3515554,
+  "curated_rows": 2875844,
+  "quality_dropped": 639710,
+  "rows_without_detector_metadata": 0,
+  "path": "/mnt/d/projects/rainCheck/lake/utd19/curated/measurements"
+}

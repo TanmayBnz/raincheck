@@ -1,0 +1,188 @@
+{
+  "manchester": {
+    "calendar": {
+      "hours": 1728,
+      "wet_hours": 453,
+      "wet_pct": 26.2,
+      "events": 76,
+      "moderate_plus": 136,
+      "peak_wet_hours": 109,
+      "bands": {
+        "Light": 317,
+        "Moderate": 135,
+        "Heavy": 1,
+        "Extreme": 0
+      }
+    },
+    "with_traffic": {
+      "hours": 504,
+      "wet_hours": 160,
+      "wet_pct": 31.7,
+      "events": 28,
+      "moderate_plus": 46,
+      "peak_wet_hours": 40,
+      "bands": {
+        "Light": 114,
+        "Moderate": 46,
+        "Heavy": 0,
+        "Extreme": 0
+      }
+    },
+    "data_days": 21
+  },
+  "bolton": {
+    "calendar": {
+      "hours": 144,
+      "wet_hours": 11,
+      "wet_pct": 7.6,
+      "events": 4,
+      "moderate_plus": 3,
+      "peak_wet_hours": 4,
+      "bands": {
+        "Light": 8,
+        "Moderate": 3,
+        "Heavy": 0,
+        "Extreme": 0
+      }
+    },
+    "with_traffic": {
+      "hours": 96,
+      "wet_hours": 5,
+      "wet_pct": 5.2,
+      "events": 2,
+      "moderate_plus": 1,
+      "peak_wet_hours": 1,
+      "bands": {
+        "Light": 4,
+        "Moderate": 1,
+        "Heavy": 0,
+        "Extreme": 0
+      }
+    },
+    "data_days": 4
+  },
+  "rotterdam": {
+    "calendar": {
+      "hours": 1032,
+      "wet_hours": 157,
+      "wet_pct": 15.2,
+      "events": 39,
+      "moderate_plus": 42,
+      "peak_wet_hours": 35,
+      "bands": {
+        "Light": 115,
+        "Moderate": 41,
+        "Heavy": 1,
+        "Extreme": 0
+      }
+    },
+    "with_traffic": {
+      "hours": 144,
+      "wet_hours": 19,
+      "wet_pct": 13.2,
+      "events": 6,
+      "moderate_plus": 1,
+      "peak_wet_hours": 3,
+      "bands": {
+        "Light": 18,
+        "Moderate": 1,
+        "Heavy": 0,
+        "Extreme": 0
+      }
+    },
+    "data_days": 6
+  },
+  "groningen": {
+    "calendar": {
+      "hours": 384,
+      "wet_hours": 79,
+      "wet_pct": 20.6,
+      "events": 13,
+      "moderate_plus": 26,
+      "peak_wet_hours": 17,
+      "bands": {
+        "Light": 53,
+        "Moderate": 26,
+        "Heavy": 0,
+        "Extreme": 0
+      }
+    },
+    "with_traffic": {
+      "hours": 48,
+      "wet_hours": 11,
+      "wet_pct": 22.9,
+      "events": 4,
+      "moderate_plus": 2,
+      "peak_wet_hours": 1,
+      "bands": {
+        "Light": 9,
+        "Moderate": 2,
+        "Heavy": 0,
+        "Extreme": 0
+      }
+    },
+    "data_days": 2
+  },
+  "torino": {
+    "calendar": {
+      "hours": 504,
+      "wet_hours": 101,
+      "wet_pct": 20.0,
+      "events": 10,
+      "moderate_plus": 40,
+      "peak_wet_hours": 28,
+      "bands": {
+        "Light": 61,
+        "Moderate": 40,
+        "Heavy": 0,
+        "Extreme": 0
+      }
+    },
+    "with_traffic": {
+      "hours": 504,
+      "wet_hours": 101,
+      "wet_pct": 20.0,
+      "events": 10,
+      "moderate_plus": 40,
+      "peak_wet_hours": 28,
+      "bands": {
+        "Light": 61,
+        "Moderate": 40,
+        "Heavy": 0,
+        "Extreme": 0
+      }
+    },
+    "data_days": 21
+  },
+  "essen": {
+    "calendar": {
+      "hours": 4512,
+      "wet_hours": 830,
+      "wet_pct": 18.4,
+      "events": 179,
+      "moderate_plus": 256,
+      "peak_wet_hours": 237,
+      "bands": {
+        "Light": 574,
+        "Moderate": 252,
+        "Heavy": 4,
+        "Extreme": 0
+      }
+    },
+    "with_traffic": {
+      "hours": 840,
+      "wet_hours": 199,
+      "wet_pct": 23.7,
+      "events": 35,
+      "moderate_plus": 60,
+      "peak_wet_hours": 58,
+      "bands": {
+        "Light": 139,
+        "Moderate": 59,
+        "Heavy": 1,
+        "Extreme": 0
+      }
+    },
+    "data_days": 35
+  }
+}

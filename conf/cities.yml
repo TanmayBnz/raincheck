@@ -1,0 +1,196 @@
+# UTD19 per-city configuration.
+#
+# Every entry here encodes a defect or quirk found in the raw dataset during the
+# Phase-1 reconnaissance audit. Do not "simplify" these away without re-running
+# the audit -- each one silently corrupts results if dropped.
+
+# ---------------------------------------------------------------------------
+# City key normalization.
+# detectors_public.csv misspells Los Angeles; utd19_u.csv does not. Left
+# unmapped, the detector join for 1,725 detectors silently returns zero rows.
+# ---------------------------------------------------------------------------
+aliases:
+  losanageles: losangeles
+
+# Present in detector metadata (1,887 detectors) but with zero measurement rows.
+# Expected to be absent from the landed measurement table.
+metadata_only:
+  - tokyo
+
+# ---------------------------------------------------------------------------
+# Quality-flag semantics.
+#
+# UTD19 encodes the `error` column inconsistently across cities:
+#   manchester / rotterdam / torino : NULL (ok) | "1" (flagged)  -- NO zeros
+#   essen                           : "0" (ok)  | "1" (flagged)
+#
+# Therefore `WHERE error = 0` -- the obvious reading of "apply the quality
+# flags" -- discards 100% of Manchester, Rotterdam and Torino. The safe
+# predicate is "not explicitly flagged".
+#
+# The landed table keeps `error` as a raw string so this rule can be revised
+# without re-landing 134M rows.
+# ---------------------------------------------------------------------------
+quality:
+  flagged_values: ["1"]
+
+# ---------------------------------------------------------------------------
+# Candidate study cities: those carrying BOTH speed and occupancy.
+# Grouped into cohorts that share a rain regime and have overlapping windows,
+# so rain-response coefficients can be pooled (baselines are never pooled).
+# ---------------------------------------------------------------------------
+cohorts:
+  uk_nw:
+    cities: [manchester, bolton]
+    note: "windows overlap 2017-11-13..11-18; ~15 km apart, one rain regime"
+  nl:
+    cities: [rotterdam, groningen]
+    note: "windows overlap 2017-09-21..10-06"
+  it:
+    cities: [torino]
+    note: "autumn 2016; largest detector count of any speed-bearing city"
+  de:
+    cities: [essen]
+    note: "spateGAN in-domain anchor (German radar training domain)"
+
+# ---------------------------------------------------------------------------
+# STUDY SET -- the Phase-1 gate outcome (reports/phase1_gate.md §4).
+#
+# Of 39 cities with measurements, speed exists in 9 and survives the gate in 3.
+# The cohorts block above is the pre-gate grouping and is retained only as a
+# record of what was considered; `study` is what Phase 2 onward actually reads.
+#
+# Roles:
+#   manchester -- primary analysis city
+#   torino     -- secondary; carries road-class stratification (399 detectors)
+#   essen      -- validation anchor; cleanest data, spateGAN in-domain (German)
+#
+# baseline_res_min: the finest (detector, dow, time-bin) resolution at which
+# cells hold enough observations for a median. The 5-min profile CONTEXT.md
+# originally specified is not estimable in ANY city -- 21 usable days gives only
+# 3 recurrences of each weekday.
+#
+# occ_scale: UTD19 documents `occ` as a 0-1 fraction. It is not. Medians of
+# 5-9 against Essen's 0.007 show these cities report PERCENT. Verified by the
+# post-rescale plausibility band below; qa_curated.py fails the run if a
+# city's normalized occupancy leaves that band.
+#
+# tz: `interval` is seconds since LOCAL midnight, so local->UTC needs the city's
+# zone. Rainfall grids are UTC; getting this wrong shifts every reading by an
+# hour and silently mis-attributes rain.
+# ---------------------------------------------------------------------------
+study:
+  manchester:
+    role: primary
+    tz: Europe/London
+    occ_scale: percent
+    baseline_res_min: 60
+  torino:
+    role: secondary
+    tz: Europe/Rome
+    occ_scale: percent
+    baseline_res_min: 60
+  essen:
+    role: validation
+    tz: Europe/Berlin
+    occ_scale: fraction
+    baseline_res_min: 30
+
+# ---------------------------------------------------------------------------
+# L1 curation rules. Each is mandated by a defect in reports/phase1_gate.md §6.
+# ---------------------------------------------------------------------------
+curation:
+  # Rule 3 -- unrecoverable occupancy. Torino and Rotterdam carry literal `inf`,
+  # and 1.5-10.8% of rows exceed 100 on a scale whose ceiling is 100. Dropped
+  # (to NULL), never rescaled: a value of 2094 carries no recoverable signal.
+  occ_max_raw:
+    percent: 100.0
+    fraction: 1.0
+
+  # Post-rescale plausibility band, checked per city by qa_curated.py.
+  # A median of ~8% occupancy is physically ordinary for a signalized urban
+  # arterial; a median of 0.007 (Essen) is low but consistent with detectors
+  # sited away from stop lines. Anything outside the band means the occ_scale
+  # inference above is wrong and every free-flow baseline built on it is void.
+  occ_plausible:
+    median_min: 0.0005
+    median_max: 0.30
+    p99_max: 1.0
+
+  # Rule 4/5 -- see curate_measurements.py. speed = 0 AND flow = 0 means no
+  # vehicle was observed, not a standstill; it becomes NULL. speed = 0 AND
+  # flow > 0 is kept but flagged, because at Manchester's 0.4% it is plausibly
+  # genuine while at Rotterdam's 10.8% it was sensor fault.
+
+  # Not one of the six gate rules. An urban loop reporting above this is
+  # faulty, and such rows would inflate the 85th-percentile free-flow speed --
+  # the denominator of every delay metric. Nulled, and the rate is reported.
+  speed_cap_kmh: 150.0
+
+# ---------------------------------------------------------------------------
+# L2a baseline layer (Phase 3).
+#
+# The dry-only rule is the single most consequential choice in the project. If
+# rainy intervals enter the baseline, the baseline absorbs the very effect being
+# measured and the estimated rain impact is biased toward zero by roughly
+# (1 - p), p being the wet fraction. Everything here exists to keep that from
+# happening.
+# ---------------------------------------------------------------------------
+baseline:
+  # Same threshold the Phase-1 event count used, so "wet" means one thing
+  # across the whole project.
+  wet_threshold_mm: 0.1
+
+  # Hours after rain stops that still count as contaminated. The road surface
+  # stays wet and drivers stay cautious well after precipitation ends, so an
+  # unbuffered "not raining right now" test would readmit exactly the recovery
+  # period the delay metric is trying to measure.
+  dry_buffer_hours: 2
+
+  # Free-flow speed is the 85th percentile of speed conditioned on occupancy
+  # below critical -- NOT a maximum, and NOT a night-time mean. Conditioning on
+  # low density is what makes it free-flow rather than merely off-peak.
+  free_flow_pct: 0.85
+  min_obs_free_flow: 100
+
+  # A (detector, dow, tbin) profile cell below this is noise, and the cell is
+  # the DENOMINATOR of the delay metric. Same threshold as the Phase-1 audit.
+  min_obs_cell: 20
+
+  # Critical occupancy is estimated per detector from its own fundamental
+  # diagram: bin occupancy, take the bin whose median flow is highest. Detectors
+  # with too little data, or whose FD peak lands outside a physically sensible
+  # range, fall back to the city median rather than to a global constant.
+  occ_bin_width: 0.02
+  min_obs_critical_occ: 200
+  critical_occ_bounds: [0.05, 0.40]
+  critical_occ_fallback: 0.15
+
+# ---------------------------------------------------------------------------
+# Spatial index (L1). CONTEXT.md §6/L1 specified "H3 or geohash"; neither is
+# used, because neither is the key this pipeline actually joins on. Rainfall
+# arrives as regular lat/lon grids, so detectors are indexed directly onto
+# those grids -- exact join, no dependency, no cell-size mismatch.
+#   era5  : 0.25 deg, the native reanalysis grid (L2b input, W3 rain counting)
+#   hires : 0.018 deg, spateGAN-ERA5's lat/lon output grid (~2 km)
+# ---------------------------------------------------------------------------
+spatial_index:
+  era5_deg: 0.25
+  hires_deg: 0.018
+
+# Speed-bearing but excluded from cohorts, with the reason.
+excluded:
+  birmingham: "occupancy 0% -- cannot condition free-flow on occupancy"
+  innsbruck: "occupancy 0%; only 16 detectors"
+  constance: "6-day window; linkid entirely absent (no detector->link mapping)"
+
+# Approximate bounding boxes (N, W, S, E) for the ERA5 pre-check in W3.
+# Native-resolution ERA5 only -- spateGAN's 672x672 km minimum extent does not
+# apply to event counting.
+bboxes:
+  manchester: [53.65, -2.40, 53.35, -2.10]
+  bolton:     [53.65, -2.55, 53.50, -2.35]
+  rotterdam:  [52.00, 4.30, 51.85, 4.60]
+  groningen:  [53.30, 6.45, 53.15, 6.70]
+  torino:     [45.15, 7.55, 44.98, 7.80]
+  essen:      [51.53, 6.90, 51.36, 7.15]

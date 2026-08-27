@@ -1,0 +1,13 @@
+.venv/
+.spark-tmp/
+lake/
+export/
+__pycache__/
+*.pyc
+*.csv
+!conf/*.csv
+.env
+.env.*
+!.env.example
+vendor/
+.claude/

@@ -1,0 +1,109 @@
+{
+  "generated": "2026-08-27 09:47 UTC",
+  "max_diff": 7.025630077706069e-17,
+  "cities": [
+    {
+      "city": "essen",
+      "our_rows": 291065,
+      "iutf_rows": 291893,
+      "matched": 291065,
+      "ours_unmatched": 0,
+      "flow_agree": 1.0,
+      "occ_agree": 1.0,
+      "speed_agree": 1.0,
+      "flow_maxdiff": 0.0,
+      "occ_maxdiff": 7.025630077706069e-17,
+      "speed_maxdiff": 0.0
+    },
+    {
+      "city": "manchester",
+      "our_rows": 765096,
+      "iutf_rows": 1142893,
+      "matched": 765096,
+      "ours_unmatched": 0,
+      "flow_agree": 1.0,
+      "occ_agree": 1.0,
+      "speed_agree": 1.0,
+      "flow_maxdiff": 0.0,
+      "occ_maxdiff": 0.0,
+      "speed_maxdiff": 0.0
+    },
+    {
+      "city": "torino",
+      "our_rows": 1819683,
+      "iutf_rows": 2080768,
+      "matched": 1819683,
+      "ours_unmatched": 0,
+      "flow_agree": 1.0,
+      "occ_agree": 1.0,
+      "speed_agree": 1.0,
+      "flow_maxdiff": 0.0,
+      "occ_maxdiff": 0.0,
+      "speed_maxdiff": 0.0
+    }
+  ],
+  "contents": [
+    {
+      "city": "essen",
+      "start": "2017-03-27",
+      "end": "2017-09-30",
+      "weather_res": "1h",
+      "traffic_res": "5min",
+      "sensors": 38,
+      "roads": 21044,
+      "has_speed": true,
+      "reading_columns": [
+        "datetime",
+        "detid",
+        "flow",
+        "occ",
+        "speed",
+        "error",
+        "city"
+      ],
+      "weather_cells": 1
+    },
+    {
+      "city": "manchester",
+      "start": "2017-09-08",
+      "end": "2017-11-18",
+      "weather_res": "1h",
+      "traffic_res": "5min",
+      "sensors": 181,
+      "roads": 8794,
+      "has_speed": true,
+      "reading_columns": [
+        "datetime",
+        "detid",
+        "flow",
+        "occ",
+        "speed",
+        "error",
+        "city"
+      ],
+      "weather_cells": 1
+    },
+    {
+      "city": "torino",
+      "start": "2016-09-26",
+      "end": "2016-10-16",
+      "weather_res": "1h",
+      "traffic_res": "5min",
+      "sensors": 399,
+      "roads": 37681,
+      "has_speed": true,
+      "reading_columns": [
+        "datetime",
+        "detid",
+        "flow",
+        "occ",
+        "speed",
+        "error",
+        "city"
+      ],
+      "weather_cells": 4
+    }
+  ],
+  "verdict": "PASS",
+  "failures": []
+}

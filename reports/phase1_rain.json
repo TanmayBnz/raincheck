@@ -1,0 +1,86 @@
+{
+  "manchester": {
+    "hours": 1728,
+    "wet_hours": 453,
+    "wet_pct": 26.2,
+    "events": 76,
+    "peak_wet_hours": 109,
+    "bands": {
+      "Light": 317,
+      "Moderate": 135,
+      "Heavy": 1,
+      "Extreme": 0
+    },
+    "moderate_plus": 136
+  },
+  "bolton": {
+    "hours": 144,
+    "wet_hours": 11,
+    "wet_pct": 7.6,
+    "events": 4,
+    "peak_wet_hours": 4,
+    "bands": {
+      "Light": 8,
+      "Moderate": 3,
+      "Heavy": 0,
+      "Extreme": 0
+    },
+    "moderate_plus": 3
+  },
+  "rotterdam": {
+    "hours": 1032,
+    "wet_hours": 157,
+    "wet_pct": 15.2,
+    "events": 39,
+    "peak_wet_hours": 35,
+    "bands": {
+      "Light": 115,
+      "Moderate": 41,
+      "Heavy": 1,
+      "Extreme": 0
+    },
+    "moderate_plus": 42
+  },
+  "groningen": {
+    "hours": 384,
+    "wet_hours": 79,
+    "wet_pct": 20.6,
+    "events": 13,
+    "peak_wet_hours": 17,
+    "bands": {
+      "Light": 53,
+      "Moderate": 26,
+      "Heavy": 0,
+      "Extreme": 0
+    },
+    "moderate_plus": 26
+  },
+  "torino": {
+    "hours": 504,
+    "wet_hours": 101,
+    "wet_pct": 20.0,
+    "events": 10,
+    "peak_wet_hours": 28,
+    "bands": {
+      "Light": 61,
+      "Moderate": 40,
+      "Heavy": 0,
+      "Extreme": 0
+    },
+    "moderate_plus": 40
+  },
+  "essen": {
+    "hours": 4512,
+    "wet_hours": 830,
+    "wet_pct": 18.4,
+    "events": 179,
+    "peak_wet_hours": 237,
+    "bands": {
+      "Light": 574,
+      "Moderate": 252,
+      "Heavy": 4,
+      "Extreme": 0
+    },
+    "moderate_plus": 256
+  }
+}

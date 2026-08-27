@@ -1,0 +1,22 @@
+{
+  "generated": "2026-08-27 10:28 UTC",
+  "a_clusters": 4468,
+  "a_intervals": 33175,
+  "b_clusters": 10114,
+  "b_intervals": 2094391,
+  "cities": [
+    "essen",
+    "manchester",
+    "torino"
+  ],
+  "commentary": [
+    "- **Coverage.** IUTF-as-shipped can estimate **5 of 8** headline band x road-state cells, against **8 of 8** for this pipeline. At city level IUTF supports 2 of 3 study cities (essen, manchester); this pipeline supports all 3.",
+    "- **Torino is the casualty, and the reason is instructive.** Its window is 21 days. Harmonised to hourly, a (detector, hour-of-day) baseline cell can hold at most 21 dry observations, which falls under the min_obs_cell of 20 once wet and buffered hours are removed \u2014 so no baseline is estimable and the city drops out entirely. The same 21 days at 5-minute resolution give roughly 250 dry observations per cell. Torino is the largest speed-bearing city in UTD19, and hourly aggregation makes it unanalysable here.",
+    "- **Precision.** Median 95% interval width is **12.6 pp** for IUTF-as-shipped against **4.5 pp** for this pipeline \u2014 roughly 3x tighter. Arm A's larger point estimates are a symptom of that width, not evidence of a stronger effect: its widest cells carry its biggest numbers.",
+    "- **No usable dose-response from the coarse arm.** On congested roads it puts Light at -23.6 pp and Moderate at +27.1 pp \u2014 opposite signs, with the Moderate interval spanning zero. That is the qualitative claim IUTF does make (\"more rain, more change\") failing to survive quantification at its own resolution.",
+    "- **The speed layer is not redundant with the flow layer.** Speed and flow move in opposite directions, both significantly, in 4 cells: congested/Light, congested/Moderate, congested/Heavy, congested/Extreme. That is the demand channel made visible \u2014 a road that emptied, not a road that got faster. A flow-only analysis cannot tell the two apart, and IUTF is flow-only."
+  ],
+  "cells_both_arms": 5,
+  "verdict": "PASS",
+  "failures": []
+}
