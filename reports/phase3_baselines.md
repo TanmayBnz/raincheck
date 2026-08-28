@@ -4,6 +4,15 @@ _Generated 2026-08-27 09:28 UTC. Free-flow speed, dry-only typical profiles, and
 
 **Gate verdict: PASS**
 
+> **⚠️ Correction notice — 2026-08-28.** §2 of this report advanced an
+> explanation for the Light-is-faster anomaly that has since been **tested and
+> falsified**. The explanation is struck through in place rather than deleted,
+> with the disproving evidence beside it, so the record of what was believed and
+> when stays intact. **Nothing else in this report is affected** — the
+> free-flow, profile and delay-metric results in §3–§5 are untouched, and the
+> gate verdict stands. Disproving evidence: `reports/phase5_threshold_sweep.md`
+> §4.
+
 ## 1. What the dry filter kept
 
 Rain labels come from native-resolution ERA5 at city-hour granularity
@@ -47,12 +56,47 @@ neither — splitting by intensity band shows why:
 **Light rain reads as *faster* than dry; Moderate+ reads as slower.** Since
 Light is ~70% of all wet intervals, pooling them cancels the effect out.
 
-The Light-is-faster result is confounding, not physics. A 31 km cell-hour is
-flagged wet when its *area-mean* reaches 0.1 mm — which includes hours that
-were mostly dry, and hours whose drizzle fell nowhere near a detector. What
-that label mostly tracks is whatever else correlates with drizzly hours
-(time of day, season, traffic volume), which is exactly the confounding
-CONTEXT.md §9 flags.
+> ~~The Light-is-faster result is confounding, not physics. A 31 km cell-hour is
+> flagged wet when its *area-mean* reaches 0.1 mm — which includes hours that
+> were mostly dry, and hours whose drizzle fell nowhere near a detector. What
+> that label mostly tracks is whatever else correlates with drizzly hours
+> (time of day, season, traffic volume), which is exactly the confounding
+> CONTEXT.md §9 flags.~~
+
+**❌ FALSIFIED 2026-08-28. The paragraph above was wrong and is retained only
+as a record of what was believed at the time.**
+
+The claim was that coarse resolution causes the anomaly: a 31 km hourly label
+calls an interval wet when the rain fell nowhere near the detector, so the Light
+band is polluted with effectively-dry intervals. That is a testable claim, and it
+makes a clear prediction — **label rain per detector at 2 km / 10 min and the
+spurious positive should shrink toward zero.**
+
+It was tested as a controlled arm of the threshold sweep, holding the estimator,
+the seed and the bootstrap draws fixed and changing only the rainfall labelling.
+**The prediction failed in the opposite direction.** Per-detector labelling did
+not shrink the effect; it strengthened it:
+
+| | coarse label (A0, production) | per-detector 2 km label (A2) |
+|---|---|---|
+| city × road-state cells with a positive Light effect | 2 of 6 | **6 of 6** |
+| congested Light contrast | +4.6 pp | **+9.1 pp** |
+
+Sharpening the rainfall label made drizzle look *faster still*, and made it do so
+consistently in every city and road state rather than in two cells out of six.
+Whatever drives the anomaly survives per-detector labelling, so mislabelling is
+not the mechanism.
+
+**What replaced it:** nothing yet. Two further light-rain-specific tests were run
+in `reports/phase5_emptier_roads.md` §5 — whether the emptier-roads effect
+explains it — and **both came back null** (rank correlation −0.02 within the Light
+band; splitting on whether traffic was actually lighter moves the effect by
+0.04 pp). **The Light-is-faster anomaly is currently unexplained and is documented
+as open.** A separate finding from the same sweep is relevant but not an
+explanation: 0.1 mm/h is a rain-gauge detection floor rather than a
+meteorological rainfall class, and ERA5 is known to produce too much light
+drizzle — both are reasons to distrust the Light band, neither tells us what
+produces the positive sign.
 
 Two consequences worth carrying forward:
 
@@ -65,6 +109,22 @@ Two consequences worth carrying forward:
    removed set is biased toward whatever drizzle correlates with. This
    should be revisited in Phase 4 against the 2 km fields, where "was it
    raining *at this detector*" finally becomes answerable.
+
+> **Resolution of consequence 2 — 2026-08-28.** The revisit was run, as a 2×2
+> factorial over rainfall resolution and threshold with the decision rule fixed
+> in code before any arm executed. **Verdict: HOLD — the threshold stays at
+> 0.1 mm**, and `conf/cities.yml` is unchanged. Raising it to the Met Office
+> slight/moderate boundary of 0.5 mm does recover sample size, but it does not
+> remove the anomaly this section was written about, and it buries the anomaly
+> by folding the Light band into Dry. Consequence 1 stands unchanged.
+>
+> One genuine defect did surface from that sweep and is **not** fixed here:
+> **2.15% of the production dry baseline carries a rain band at the detector.**
+> That is a property of the coarse mask rather than of the threshold — a
+> city-wide hourly mean below 0.1 mm can still sit over a detector that was
+> being rained on — and it is zero in every per-detector arm. Whether to adopt
+> the per-detector baseline is an open decision, since it also flips four of
+> Manchester's Moderate-band results. See `reports/phase5_threshold_sweep.md`.
 
 ## 3. Free-flow speed
 

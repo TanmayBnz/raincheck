@@ -1,0 +1,114 @@
+{
+  "generated": "2026-08-27 15:02 UTC",
+  "verdict": "PASS",
+  "failures": [],
+  "n_paired": 121,
+  "quadrants": {
+    "speed_up_flow_down": 36,
+    "speed_up_flow_up": 11,
+    "speed_down_flow_down": 40,
+    "speed_down_flow_up": 34
+  },
+  "correlations": {
+    "all bands": {
+      "n": 121,
+      "rho": -0.4271711150250643
+    },
+    "Light only": {
+      "n": 32,
+      "rho": -0.02126099706744868
+    }
+  },
+  "split": [
+    {
+      "band": "Light",
+      "flow_state": "traffic lighter than normal",
+      "speed": -0.005843643236502542,
+      "lo": -0.012604106284234378,
+      "hi": 0.0013119341528348592,
+      "signif": false,
+      "n_clusters": 5170
+    },
+    {
+      "band": "Moderate",
+      "flow_state": "traffic lighter than normal",
+      "speed": -0.00987618932635988,
+      "lo": -0.01810289395304828,
+      "hi": -0.0010625440113137333,
+      "signif": true,
+      "n_clusters": 2917
+    },
+    {
+      "band": "Heavy",
+      "flow_state": "traffic lighter than normal",
+      "speed": -0.004414684620008651,
+      "lo": -0.023469333429120644,
+      "hi": 0.020561381811894125,
+      "signif": false,
+      "n_clusters": 1010
+    },
+    {
+      "band": "Extreme",
+      "flow_state": "traffic lighter than normal",
+      "speed": 0.01797842647905653,
+      "lo": -0.0103988215694279,
+      "hi": 0.050576288715265,
+      "signif": false,
+      "n_clusters": 255
+    },
+    {
+      "band": "Light",
+      "flow_state": "traffic normal or heavier",
+      "speed": -0.006195063676534349,
+      "lo": -0.011937548121995208,
+      "hi": -0.000219450844103642,
+      "signif": true,
+      "n_clusters": 5542
+    },
+    {
+      "band": "Moderate",
+      "flow_state": "traffic normal or heavier",
+      "speed": -0.013800102175801188,
+      "lo": -0.022248767013798156,
+      "hi": -0.0034405532621183434,
+      "signif": true,
+      "n_clusters": 2985
+    },
+    {
+      "band": "Heavy",
+      "flow_state": "traffic normal or heavier",
+      "speed": -0.01942840906489833,
+      "lo": -0.03463896374022139,
+      "hi": 0.0013006791273124962,
+      "signif": false,
+      "n_clusters": 1150
+    },
+    {
+      "band": "Extreme",
+      "flow_state": "traffic normal or heavier",
+      "speed": -0.027907224445982565,
+      "lo": -0.049295194208957435,
+      "hi": -0.004071974589546178,
+      "signif": true,
+      "n_clusters": 259
+    }
+  ],
+  "decision": {
+    "headline": "Half of it. Rain really does empty roads and that really does raise speed -- but the effect does NOT track the light-rain result, so it is not the explanation for why drizzle looks faster.",
+    "general_passed": 2,
+    "general_total": 2,
+    "drizzle_passed": 0,
+    "drizzle_total": 2,
+    "reasoning": [
+      "GENERAL: where speed rises, traffic falls in 77% of contrasts. The combination that would refute the explanation -- more cars and more speed -- appears 11 times.",
+      "GENERAL: across all bands the two channels oppose each other (rank correlation -0.43) -- the bigger the drop in cars, the bigger the rise in speed.",
+      "DRIZZLE: within light rain alone the rank correlation is -0.02 across 32 contrasts -- no relationship. The drizzle results with the biggest fall in traffic are not the ones with the biggest rise in speed.",
+      "DRIZZLE: splitting light rain by whether traffic was actually lighter changes the speed effect by +0.04 pp, which is nothing. If emptier roads were driving the light-rain result, this split should have separated it."
+    ],
+    "share_speed_up_flow_down": 0.7659574468085106,
+    "rank_corr_all": -0.4271711150250643,
+    "rank_corr_light": -0.02126099706744868,
+    "light_gap": 0.00035142044003180686
+  },
+  "n_clusters": 10112
+}

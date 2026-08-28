@@ -4,6 +4,26 @@
 
 **Project Synopsis — for mentor review**
 
+> **Framing, revised 2026-08-28.** This is a **Big Data specialization
+> capstone**. It is assessed on the engineering modules it exercises — data
+> integration and processing, data modelling and management, distributed
+> machine learning (Spark MLlib), and graph processing (GraphX) — not as a
+> standalone scientific contribution. The research question exists to give
+> those modules something real to work on; the question is not itself the
+> deliverable.
+>
+> Three consequences, applied throughout this document:
+>
+> 1. **Claims of superiority over prior work are withdrawn.** The IUTF dataset
+>    is used as a **validation oracle and documented benchmark**. This project
+>    is **complementary to it, not better than it**.
+> 2. **Two known weaknesses are stated up front rather than buried** — the
+>    downscaled rainfall has never been checked against a rain gauge (§4.4,
+>    §9), and the congestion split conditions on a quantity rain itself changes
+>    (§6/L2a, §9).
+> 3. **§7 maps every deliverable to the module it evidences**, so coverage of
+>    the assessed syllabus is legible without reading the whole document.
+
 ---
 
 ## 1. Problem Statement
@@ -12,7 +32,9 @@ Rainfall measurably degrades urban road performance, but the degradation is not 
 
 The scientific building blocks now exist in the open. Loop-detector traffic archives (UTD19), global reanalysis rainfall (ERA5), and a deep-learning precipitation downscaler (spateGAN-ERA5) are all publicly available. A very recent dataset — IUTF, described below — has even pre-joined UTD19 traffic with ERA5 rainfall for 40 cities. What does not yet exist is an open, reproducible pipeline that turns these ingredients into **decontaminated speed baselines** and a **rain-to-delay prediction layer** at high spatio-temporal resolution.
 
-**The gap this project addresses:** existing open resources quantify rainfall's effect on traffic *flow* against coarse (~31 km, hourly) rainfall, and derive no speed baselines from the speed data they carry. This project instead targets rain-induced *delay* — via free-flow and typical-speed baselines decontaminated of rain — against GAN-downscaled 2 km / 10 min rainfall, with effects reported as cluster-robust intervals rather than point estimates. (An earlier version of this statement also claimed per-city windows as a differentiator; that claim was withdrawn on 2026-08-27 — see §3.)
+**What this project adds:** existing open resources quantify rainfall's effect on traffic *flow* against coarse (~31 km, hourly) rainfall, and derive no speed baselines from the speed data they carry. This project builds the missing pieces — free-flow and typical-speed baselines computed on dry intervals only, GAN-downscaled 2 km / 10 min rainfall joined at the detector, and effects reported as cluster-robust intervals rather than point estimates.
+
+That is an **additive** statement, and it is deliberately no longer a comparative one. Two earlier framings have been withdrawn: the claim that per-city windows were a differentiator (false — see §3), and the claim that this pipeline is superior to IUTF (unsupportable — IUTF is a peer-reviewed, curated, 40-city resource, and this project runs on three cities and has no ground truth for its rainfall). The honest position is that the two are **complementary**: IUTF covers breadth with coarse rainfall and no derived speed layer; this project covers depth on three cities with fine rainfall and a derived speed layer, and uses IUTF to check its own correctness.
 
 ---
 
@@ -24,8 +46,9 @@ The scientific building blocks now exist in the open. Loop-detector traffic arch
 | **O2** | Derive per-detector **free-flow speed** and **typical speed profiles** by day-of-week × hour-of-day, decontaminated of rainfall effects |
 | **O3** | Downscale coarse global reanalysis rainfall to 2 km / 10 min resolution and spatially join it to the traffic network |
 | **O4** | Quantify the **dose-response relationship** between rainfall intensity and speed degradation, stratified by road class and time of day |
-| **O5** | Train and serve a **prediction layer** that maps forecast rainfall to expected delay |
-| **O6** | Expose results through a TraffiCure-style analytics dashboard |
+| **O5** | Measure what the weather pipeline is worth, via a **rain-ablation experiment** in Spark MLlib — identical models with and without the rainfall features, across four holdout designs *(revised 2026-08-28; previously "train and serve a prediction layer that maps forecast rainfall to expected delay" — the operational framing is dropped, see §6/L3b)* |
+| **O6** | Derive **network structure** from the road graph in GraphX — delay propagation to adjacent links, centrality covariates, corridor identification |
+| **O7** | Expose results through an analytics dashboard demonstrating the use case |
 
 ---
 
@@ -40,12 +63,12 @@ A dataset published while this project was being scoped — **IUTF (Integrated U
 
 IUTF has already solved parts of what this project's Layer 1 and Layer 2b would otherwise build from scratch: time-zone/DST conversion to UTC, 5-minute-to-hourly aggregation, sensor-to-road-segment matching, and area-weighted rainfall attribution. It also validated that the joined data reveals a **dose-response relationship**, binning rainfall as Light (<0.5), Moderate (0.5–4), Heavy (4–10), and Extreme (>10 mm/hr) per Met Office definitions.
 
-**Where IUTF stops — and this project begins.** Three limitations define the contribution here:
+**Where IUTF stops, and what this project adds on top.** Two gaps define the contribution — stated as gaps IUTF leaves open, not as faults in IUTF:
 
 > **Re-audited 2026-08-27 against the downloaded files, not the paper.** Two of the three limitations below were wrong as originally written and have been corrected. See `reports/phase5_iutf_validation.md`. The correction narrows the contribution but does not remove it: limitation 2 is the substantive one and it is intact.
 
 1. **No derived speed layer** (originally, and too strongly, "flow, not speed"). IUTF's `5min_readings.parquet` *does* carry a `speed` column — the raw UTD19 columns are passed through intact. What is true is that IUTF's published *validation* is built on flow change, and that IUTF derives nothing from speed. Free-flow speed conditioned on critical occupancy, dry-only typical-speed profiles, and the delay metrics built on them are absent from IUTF and are this project's own work (L2a). The contribution is the derived baseline layer, not the presence of the column.
-2. **Coarse rainfall.** IUTF uses ERA5 at its native ~31 km hourly resolution and explicitly flags the spatial-scale mismatch against point sensors as a limitation. This project's spateGAN downscaling to 2 km / 10 min is a direct fix for the weakness IUTF names in its own paper. **Confirmed against the files** — IUTF's per-city `grid_info.parquet` puts the whole of Manchester in a single 0.25° cell, so within-city rainfall variation there is exactly zero. This is the real differentiator.
+2. **Coarse rainfall.** IUTF uses ERA5 at its native ~31 km hourly resolution and explicitly flags the spatial-scale mismatch against point sensors as a limitation. This project's spateGAN downscaling to 2 km / 10 min is a direct fix for the weakness IUTF names in its own paper. **Confirmed against the files** — IUTF's per-city `grid_info.parquet` puts the whole of Manchester in a single 0.25° cell, so within-city rainfall variation there is exactly zero. This is the substantive addition — though note it is an addition whose *correctness* is itself unverified, since the 2 km fields have no ground truth (§4.4).
 3. ~~**Cross-city-truncated windows.**~~ **Withdrawn — this claim was false.** IUTF does *not* restrict cities to a shared window. Each city carries its own, matching UTD19's actual coverage (Manchester 2017-09-08→11-18, Torino 2016-09-26→10-16, Essen 2017-03-27→09-30) — the same windows this project derived independently from raw UTD19, necessarily, since they are simply what UTD19 holds. "2015–2017" is the span across all 40 cities, not a per-city truncation. Per-city windows are not a differentiator and must not be claimed as one.
 
 **How IUTF is used in this project.** As a **validation oracle**, not a substitute for the pipeline and not an accelerator — nothing is imported from it. The core pipeline is built from raw UTD19 + ERA5 so that the curation, downscaling, and baseline logic are genuinely the project's own work; IUTF is then used to (a) cross-check that this project's independent harmonisation reproduces IUTF's aligned output, and (b) serve as a documented prior-art benchmark.
@@ -104,7 +127,11 @@ An open-source conditional GAN (`LGlawion/spateGAN_ERA5`) published in *npj Clim
 - **Output:** high-resolution fields in UTM projection (2 km, 10 min) and lat/lon (0.018°, 10 min).
 - **Probabilistic:** ensembles are generated by varying the seed and slide parameters, giving a native uncertainty estimate.
 
-> **⭐ Downscaling is this project's key differentiator over IUTF.** IUTF's authors name coarse (31 km) rainfall as a limitation. Replacing it with spateGAN's 2 km / 10 min fields directly closes the spatial-scale mismatch between gridded rainfall and point sensors. Note the domain caveat: spateGAN was trained on German radar, so German UTD19 cities (Augsburg, Bremen, Constance, Darmstadt, Essen, Frankfurt, Hamburg, Kassel, Munich, Speyer, Stuttgart, Wolfsburg) sit in-domain and offer the strongest validation, while non-German cities test out-of-domain generalization.
+> **Downscaling is the substantive addition over IUTF — and it is unvalidated.** IUTF's authors name coarse (31 km) rainfall as a limitation of their own resource. Replacing it with spateGAN's 2 km / 10 min fields addresses the spatial-scale mismatch between gridded rainfall and point sensors, and it demonstrably adds spatial information: at 31 km, Manchester and Essen each collapse to a single cell, so within-city rainfall variation is exactly zero, whereas at 2 km detectors within a city disagree on the rainfall band on 67–93% of wet timestamps.
+>
+> **⚠️ The critical caveat, and it is not a footnote.** These fields have **never been compared against a rain gauge or radar observation**. They are plausible high-resolution realisations conditioned on ERA5, not measurements. Nothing in this project establishes that the 2 km field is *correct* at any given detector — only that it varies where the coarse field could not, and that the variation carries signal (§6/L3, Phase 4). Until gauge records are obtained from the Environment Agency, ARPA Piemonte and DWD, every downscaled-rainfall result must be read as conditional on the downscaler being right. This is the single largest outstanding weakness in the project and is tracked as such in §9 and §7/D7.
+>
+> Domain caveat on top of that: spateGAN was trained on German radar, so German UTD19 cities (Augsburg, Bremen, Constance, Darmstadt, Essen, Frankfurt, Hamburg, Kassel, Munich, Speyer, Stuttgart, Wolfsburg) sit in-domain, while non-German cities test out-of-domain generalization. Of the three study cities only **Essen** is in-domain; Manchester and Torino are not.
 
 ### 4.5 OpenStreetMap — Network Layer
 
@@ -156,6 +183,22 @@ The system follows a **Lambda architecture** — a batch layer computing authori
 │  Live map · corridor analysis · congestion heatmaps · alerts         │
 └─────────────────────────────────────────────────────────────────────┘
 ```
+
+> **What of the diagram above is actually built (as of 2026-08-28).** The
+> diagram is the *target* architecture and should not be read as a status
+> report. Built and gate-passed: **L0 batch ingestion, L1 curation, L2a
+> baselines, L2b weather, and L3(a) dose-response.** Not built: **L0's Kafka
+> replay harness, L3(b), the GraphX layer, and the whole of L4.** Two
+> substitutions are also in force and are deliberate — the lake sits on a
+> partitioned local filesystem under `lake/` rather than HDFS, and the runtime
+> is WSL2 rather than a container (below). `config.LAKE_ROOT` is the single
+> point that becomes an `hdfs://` URI if the project moves to a real cluster.
+>
+> Two labels inside the diagram are also superseded. L3(b) is no longer
+> "GBT baseline → spatio-temporal model" but a **rain-ablation experiment**
+> (§6/L3b), and the note "benchmarked against IUTF's flow-based dose-response"
+> overstates what is possible, since **IUTF publishes no per-band magnitudes**
+> (§3, `reports/phase5_iutf_benchmark.md` §1).
 
 **Execution environment — WSL2, not Docker (settled 2026-08-26).** Every Spark
 job runs under WSL2 (Ubuntu) against a venv at `~/.venvs/raincheck`, with the
@@ -210,7 +253,13 @@ This layer produces the artefact that is genuinely novel relative to IUTF: **spe
 
 **Delay metrics** derived from both: a free-flow delay ratio (congestion irrespective of cause) and a typical-speed deviation (anomaly relative to what this hour normally looks like). The second is the target variable for the prediction layer.
 
-**Two-channel decomposition via occupancy.** Rain affects traffic through two channels that behave oppositely by road state: a free-flow *speed reduction* (largest on fast, uncongested roads) and a *capacity reduction* (worsening already-congested roads). The occupancy variable lets these be separated empirically — rain effect on low-occupancy intervals versus high-occupancy intervals — which is a genuinely publishable decomposition and is only possible because UTD19 exposes raw per-interval occupancy.
+**Two-channel decomposition via occupancy.** Rain affects traffic through two channels that behave oppositely by road state: a free-flow *speed reduction* (largest on fast, uncongested roads) and a *capacity reduction* (worsening already-congested roads). The occupancy variable lets these be separated empirically — rain effect on low-occupancy intervals versus high-occupancy intervals — and it is only possible because UTD19 exposes raw per-interval occupancy.
+
+> **⚠️ Known defect in how this split is currently computed (raised 2026-08-27, not yet fixed).** The split uses the occupancy **observed during the rainy interval itself**. But rain changes occupancy — that is the demand channel, and Phase 5 measures it directly: vehicle counts fall 3.8–9.4% under rain on congested roads. Splitting on a quantity the treatment itself moves is not a clean stratification. Intervals can be sorted into the "congested" or "free-flowing" group *because* it rained, so part of the measured contrast between the two groups is selection, not response.
+>
+> This does not invalidate the finding that the two channels oppose each other — that is visible directly in the paired speed and flow columns, which need no split at all. It does mean the **magnitudes** in the split table cannot be read as clean causal effects.
+>
+> **The specified fix:** stratify on each detector's **expected** state for that weekday and hour, read from its own dry typical profile, rather than on the state realised during the rainy interval. Expected state is fixed before the rain arrives and so cannot be moved by it. The dry profiles this needs already exist from Phase 3. Both versions should then be reported side by side, since the gap between them measures how much of the original result was selection. Tracked in §7/D8 and §10 Phase 5R.
 
 **Fallback for speed-less cities.** Where a city reports only flow and occupancy, speed is recoverable through the fundamental-diagram relationship — the analysis UTD19 was originally assembled to support. Scoped as a secondary extension, not a dependency.
 
@@ -232,7 +281,13 @@ Deliberately split into two models serving two different audiences.
 
 **(a) Dose-response model — for explanation.** A generalized linear model or gradient-boosted tree with interaction terms across `rainfall band × road class × time-of-day × baseline congestion`. Its output is an interpretable elasticity table of the form *"heavy rain on an arterial during evening peak costs X% speed."* This is directly comparable to IUTF's published flow-based dose-response, but expressed in speed/delay terms.
 
-**(b) Predictive model — for operation.** Gradient-boosted trees in Spark MLlib as the honest baseline, extended to a spatio-temporal model (graph-based or recurrent) that exploits network structure. Target: speed-reduction ratio relative to the dry typical-speed profile.
+**(b) Predictive model — recast as a rain ablation.** Originally scoped as an operational forecasting service. That framing is dropped: this project has no live feed, no gauge-validated rainfall, and three cities, so a delay-forecasting *product* is not a claim it can support. The model is retained — Spark MLlib is an assessed module and the pipeline needs a modelling layer — but its purpose is now **measurement, not operation**.
+
+The experiment is a **rain ablation**: gradient-boosted trees in Spark MLlib predicting speed deviation against the dry typical profile, trained twice on identical rows, splits and hyperparameters, differing only in whether the rainfall features are present. The contrast between the two isolates the contribution of the entire weather pipeline — acquisition, downscaling, spatial join and feature engineering — in a single number.
+
+This framing is strictly stronger for the project's purposes. It exercises the same MLlib surface (feature assembly, tree ensembles, cross-validation, distributed training) while answering a question the data can actually settle: **did the downscaling earn its cost?** If the ablated model matches the full model, the weather layer bought nothing, and that is a publishable finding rather than a failure. Target remains the speed-reduction ratio relative to the dry typical-speed profile.
+
+**(c) Graph layer — network structure via GraphX.** Assessed module, currently unbuilt (§10 Phase 6b). The raw material is on disk: `links.csv` carries 140,859 link geometries with city codes, and every detector carries a `linkid`. The intended construction is a per-city road graph with links as vertices and shared endpoints as edges, supporting (i) propagation of rain-induced delay to adjacent links, (ii) connected-component and centrality measures used as model covariates, and (iii) corridor identification for the serving layer. Scoping this explicitly matters because no reviewer flagged its absence, which is precisely why it could have been missed.
 
 **Inference path.** Forecast rainfall → spateGAN downscaling → identical feature pipeline → predicted per-link delay. Because training features and inference features traverse the same code path, train/serve skew is structurally prevented.
 
@@ -245,7 +300,9 @@ Deliberately split into two models serving two different audiences.
 | Event-based | Performance on rain intervals specifically, not diluted by dry majority |
 | Cross-city transfer | German (in-domain for spateGAN) → non-German (out-of-domain) |
 
-**Baselines to beat:** historical mean, an identical model with rainfall features ablated, naïve persistence, and — where the city overlaps — IUTF's reported flow-response magnitudes as an external reference. The rain-ablated model is the critical comparison: it isolates the contribution of the entire weather pipeline.
+**Baselines to beat:** historical mean, an identical model with rainfall features ablated, and naïve persistence. The rain-ablated model is the critical comparison: it isolates the contribution of the entire weather pipeline.
+
+~~and — where the city overlaps — IUTF's reported flow-response magnitudes as an external reference.~~ **Struck 2026-08-28: IUTF publishes no per-band magnitudes**, so it cannot serve as a numeric baseline. It remains a *reproduction* benchmark — its own shipped files run through this project's estimator — rather than a performance one. See `reports/phase5_iutf_benchmark.md` §1 and §7/D5.
 
 ### Layer 4 — Serving and Visualization
 
@@ -253,14 +310,37 @@ Precomputed baselines and predictions are written to Cassandra keyed by `(city, 
 
 ---
 
-## 7. Expected Deliverables
+## 7. Expected Deliverables — Mapped to Assessed Modules
 
-1. A reproducible distributed pipeline from raw sources to served predictions, validated against the IUTF benchmark. Reproducibility is delivered via a pinned WSL2 (Ubuntu) environment rather than Docker — see §5.
-2. A published free-flow and typical-speed profile dataset for the selected cities (the speed layer IUTF does not provide).
-3. A quantified rain dose-response table in speed/delay terms, stratified by road class and time of day.
-4. A trained delay-prediction model with documented performance against four baselines, including IUTF.
-5. An analytics dashboard demonstrating the operational use case.
-6. A written report with reproducibility instructions and full data attribution.
+Restructured 2026-08-28 so that syllabus coverage is legible without reading the
+whole document. **Module** names the specialization component each deliverable
+evidences; deliverables that evidence no module are marked as such and justify
+themselves on other grounds.
+
+| # | Deliverable | Module evidenced | Status |
+|---|---|---|---|
+| **D1** | Reproducible distributed pipeline, raw sources → analysis tables, on a pinned WSL2 environment rather than Docker (§5) | **Integration & Processing** | ✅ done |
+| **D2** | Partitioned columnar lake with per-city curation rules, quality-flag and unit normalisation, UTC alignment; prior-art data held read-only in a separate namespace | **Modelling & Management** | ✅ done |
+| **D3** | Free-flow and dry-only typical-speed profile dataset per detector — the derived speed layer IUTF does not provide | **Integration & Processing** | ✅ done |
+| **D4** | Rain dose-response table in speed and flow terms, stratified by band × road class × time of day × road state, with cluster-bootstrap intervals | *(analysis; no single module)* | ✅ done, **pending D8** |
+| **D5** | **Rain-ablation experiment** in Spark MLlib — identical model with and without the weather features, across four holdout designs | **Spark MLlib** | ⬜ not started |
+| **D6** | Per-city road graph in GraphX — delay propagation to adjacent links, centrality covariates, corridor identification | **GraphX** | ⬜ not started |
+| **D7** | **Gauge validation of the downscaled rainfall** against Environment Agency / ARPA Piemonte / DWD records | *(scientific validity)* | ⬜ deferred — see §9 |
+| **D8** | **Corrected congestion split** stratifying on expected rather than realised road state, reported beside the original | *(scientific validity)* | ⬜ not started |
+| **D9** | Serving layer and analytics dashboard — demonstration of the operational use case, not a production service | **Modelling & Management** | ⬜ not started |
+| **D10** | Streaming replay harness — Kafka producer replaying curated readings at accelerated rate | **Integration & Processing** | ⬜ not started |
+| **D11** | Final report with reproducibility instructions and full data attribution | — | 🟡 per-phase reports done |
+
+**Two deliverables carry no module and are kept anyway.** D7 and D8 are the two
+weaknesses independent review converged on. D8 is cheap and should be done; D7 is
+expensive and is honestly deferred, but the project must state what it cannot
+claim without it (§4.4, §9).
+
+**Dropped from the original list:** "a trained delay-prediction model with
+documented performance against four baselines, **including IUTF**." IUTF publishes
+no per-band magnitudes, so it cannot serve as a numeric baseline — see
+`reports/phase5_iutf_benchmark.md` §1. It remains a *reproduction* benchmark
+(D1/D3) rather than a performance one.
 
 ---
 
@@ -288,6 +368,37 @@ The shortlist that previously stood here was ranked on window lengths drawn from
 
 Ranking logic, unchanged and now vindicated: **speed availability and usable-day count are hard gates; rain exposure only breaks ties among cities that clear both.**
 
+### How many storms actually underpin each rainfall band
+
+Added 2026-08-28. The 73-event figure above is counted on the **coarse** city-hour
+mask (Manchester 28, Torino 10, Essen 35). Counted on the **2 km detector-level**
+fields the picture is more generous, because storms that missed a city's average
+still hit individual detectors:
+
+| city | coarse events | **2 km storms** |
+|---|---|---|
+| essen | 35 | **56** |
+| manchester | 28 | **40** |
+| torino | 10 | **24** |
+| **total** | **73** | **120** |
+
+The number that actually matters is not the total but **how many independent
+storms sit behind each band**, since the bootstrap intervals are only as
+trustworthy as the count of independent episodes underneath them:
+
+| band | independent city-storms | intervals |
+|---|---|---|
+| Moderate | 111 | — |
+| Heavy | 73 | — |
+| **Extreme** | **27** | **2,130** |
+
+**This is stated because it bounds the Extreme-band claims.** Twenty-seven storms
+is not many. The confidence intervals reported in Phase 5 already reflect it —
+which is why the Extreme cells are wide and several are marked `ns` — but a reader
+scanning the effect table sees only the intervals, not the episode count behind
+them. The bands are not equally well supported and should not be read as though
+they were.
+
 ---
 
 ## 9. Risks and Mitigations
@@ -300,7 +411,10 @@ Ranking logic, unchanged and now vindicated: **speed availability and usable-day
 | **spateGAN out-of-domain error** | Medium | Anchor primary analysis on German cities (in-domain for the training radar); validate that downscaled fields conserve the ERA5 hourly aggregate; carry ensemble spread as an explicit uncertainty feature |
 | **No ground-truth radar for validation in some cities** | Medium | Frame downscaled rainfall as a *plausible high-resolution realization*, not a measurement; run an ablation against raw ERA5 (as IUTF used) to demonstrate the downscaling earns its place |
 | **Confounding** — rainfall correlates with season, daylight and temperature | Medium | Control explicitly for time-of-day, day-of-week and season; use the dry-only baseline as the counterfactual |
-| **"Reinventing IUTF"** — mentor asks why not just use IUTF directly | Medium | IUTF is flow-based, coarse-rainfall, and cross-city-truncated; this project is speed-based, downscaled, and per-city-windowed, and uses IUTF as a validation oracle rather than an input |
+| **"Reinventing IUTF"** — mentor asks why not just use IUTF directly | Medium | IUTF derives no speed layer and stops at 31 km rainfall; this project adds both, and uses IUTF as a validation oracle rather than an input. Note the claim of *cross-city-truncated windows* previously stated here was **false and is withdrawn** (§3) — the answer rests on the derived speed layer and the downscaling alone. The pipeline is also itself the assessed deliverable (§7), so building rather than importing is the point |
+| **Downscaled rainfall is never validated against observation** | **High** | ⚠️ **Unmitigated.** No radar or gauge ground truth has been obtained for any study city, so the 2 km fields are plausible realisations, not measurements. Partial cover only: the fields conserve the ERA5 hourly aggregate, and the D5 ablation shows whether they carry signal. Neither establishes correctness. Every downscaled result is conditional on the downscaler. Fix is D7 |
+| **Congestion split conditions on a quantity rain itself changes** | **High** | ⚠️ **Known defect, fix specified but not applied.** Splitting on occupancy observed during the rainy interval mixes selection into the contrast (§6/L2a). The paired speed-and-flow reporting is unaffected and carries the headline finding; the split *magnitudes* are what is compromised. Fix is D8 — stratify on expected state from the dry profile, report both |
+| **Assessed modules left unbuilt** — MLlib and GraphX are graded components | **High** | Both now have explicit deliverables (D5, D6) and phases (6a, 6b) rather than sitting implicit inside "prediction layer". GraphX was at 0% and was flagged by no reviewer, which is exactly how a graded module gets missed |
 | **Dataset smaller than "big data" framing implies** — 134 M rows is tens of GB, not TB | Low | Frame honestly as genuinely distributed but modestly sized; the architecture is what scales. Optionally federate PeMS (18,000+ stations, 2001–2019) to reach true multi-terabyte scale |
 
 ---
@@ -310,12 +424,14 @@ Ranking logic, unchanged and now vindicated: **speed availability and usable-day
 | Phase | Focus |
 |---|---|
 | **1. Feasibility audit** ✅ **complete — gate passed** | Obtained UTD19; audited per-city variable availability, temporal coverage, quality-flag encoding, occupancy scale and rain-event counts across all 134,380,371 rows; selected Manchester + Torino + Essen (§8). Decision document: `reports/phase1_gate.md` |
-| **2. Foundation** | L0/L1 — ingest, curate, map-match, index; cross-check against IUTF |
-| **3. Baselines** | L2a — free-flow and dry-only typical speed profiles |
-| **4. Weather** | L2b — ERA5 acquisition, spateGAN downscaling, spatial join, feature engineering |
-| **5. Analysis** ✅ **complete — gate passed** | L3(a) — dose-response quantified across band × road class × time-of-day × congestion, with 95% cluster bootstrap intervals over detector-days. Headline: conditioning on road state **reverses** the sign of the rain effect — free-flowing roads slow, congested roads show rising speed with collapsing flow (the demand channel). Report: `reports/phase5_dose_response.md`. IUTF benchmark done (`reports/phase5_iutf_benchmark.md`): reproduction, not transcription — IUTF publishes no per-band magnitudes. L1 cross-check passed exactly (`reports/phase5_iutf_validation.md`). |
-| **6. Prediction** | L3(b) — predictive model, validation, ablations |
-| **7. Serving** | L4 — Cassandra, dashboard, streaming replay demonstration |
+| **2. Foundation** ✅ **complete — gate passed** | L0/L1 — 2,875,844 rows curated across three cities; per-city occupancy rescaling confirmed against a plausibility band rather than assumed; quality-flag, zero-speed and UTC rules applied; detector join complete with zero unmatched. Report: `reports/phase2_curation.md`. **Not built: the Kafka replay harness (D10)** — the batch path is done, the streaming path is not |
+| **3. Baselines** ✅ **complete — gate passed** | L2a — free-flow speed for 99.4–100% of detectors, sitting 6.5–8.0 km/h above the uncongested median; dry-only typical profiles; both delay metrics. Report: `reports/phase3_baselines.md`. §2 of that report carries a **falsified explanation, struck through in place** with the disproving evidence beside it |
+| **4. Weather** ✅ **complete — gate passed** | L2b — ERA5 acquired, spateGAN downscaling run on the local GPU, reprojected and joined to every detector. Downscaling demonstrably adds spatial information: detectors within a city disagree on band on 67–93% of wet timestamps, against exactly zero variation at 31 km. Report: `reports/phase4_downscaling.md`. **One ensemble member only**, so the uncertainty covariate §L2b specifies does not exist |
+| **5. Analysis** ✅ **complete — gate passed** | L3(a) — dose-response quantified across band × road class × time-of-day × congestion, with 95% cluster bootstrap intervals over detector-days. Headline: conditioning on road state **reverses** the sign of the rain effect — free-flowing roads slow, congested roads show rising speed with collapsing flow (the demand channel). Report: `reports/phase5_dose_response.md`. IUTF benchmark done (`reports/phase5_iutf_benchmark.md`): reproduction, not transcription — IUTF publishes no per-band magnitudes. L1 cross-check passed exactly (`reports/phase5_iutf_validation.md`). **⚠️ The road-state split carries a known defect** — it conditions on a quantity rain itself changes (§6/L2a). The paired speed-and-flow finding is unaffected; the split magnitudes are. Fix is Phase 5R. |
+| **5R. Analysis correction** | D8 — re-run the road-state split on **expected** state from the dry profile, report beside the original. Cheap; the profiles already exist |
+| **6a. Prediction — rain ablation** | D5 — L3(b) recast: identical Spark MLlib model with and without weather features, across the four holdout designs. **Assessed module: Spark MLlib** |
+| **6b. Graph layer** | D6 — per-city road graph from `links.csv`, delay propagation, centrality covariates, corridor identification. **Assessed module: GraphX.** Currently 0% |
+| **7. Serving** | D9/D10 — L4 storage, dashboard, streaming replay demonstration |
 | **8. Documentation** | Report, reproducibility packaging |
 
 Phase 1 is a hard gate. The single largest risk to this project is discovering, after building the pipeline, that the selected cities lack speed data or contain too few rain events within their actual collection window. **That gate has now been run and passed** — and it justified itself: four of the eight originally shortlisted cities turned out to carry no speed data at all, and the NL cohort has too few distinct days to support any day-of-week profile. Building first would have wasted the effort.
