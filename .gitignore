@@ -10,4 +10,4 @@ __pycache__/
 .env.*
 !.env.example
 vendor/
-.claude/
+.claude/logs/

@@ -1,0 +1,15 @@
+{
+  "n_total": 128,
+  "n_estimable": 115,
+  "n_suppressed": 13,
+  "n_signif": 39,
+  "n_flow": 115,
+  "design_effect": 1.8625892930768286,
+  "n_intervals": 2113520,
+  "n_clusters": 10112,
+  "intervals_per_cluster": 209.0110759493671,
+  "n_cities": 3,
+  "generated": "2026-10-17 09:07 UTC",
+  "verdict": "PASS",
+  "failures": []
+}

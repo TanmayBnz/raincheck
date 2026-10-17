@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import time
 from pathlib import Path
 
 import yaml
@@ -89,6 +90,12 @@ def get_spark(app_name: str, driver_memory: str | None = None, shuffle_partition
     In local mode the driver is also the executor, so this is the memory knob
     that actually matters.
     """
+    # PySpark converts naive Python datetimes using the OS clock, not the Spark
+    # session timezone below. On a non-UTC machine that shifts every
+    # createDataFrame timestamp (IST: +5.5 h) and silently breaks the rain join.
+    os.environ["TZ"] = "UTC"
+    time.tzset()
+
     mem = driver_memory or os.environ.get("SPARK_DRIVER_MEMORY", "5g")
     os.environ.setdefault(
         "PYSPARK_SUBMIT_ARGS",

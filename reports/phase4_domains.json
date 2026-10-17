@@ -1,4 +1,32 @@
 {
+  "manchester": {
+    "centre_lat": 53.5,
+    "centre_lon": -2.25,
+    "domain_bbox": [
+      58.89,
+      -11.31,
+      48.11,
+      6.81
+    ],
+    "first_day": "2017-09-08",
+    "last_day": "2017-11-18",
+    "path": "/home/tanbnz/projects/raincheck/lake/era5/domain/manchester_cp_lsp.nc",
+    "size_mb": 23.6
+  },
+  "torino": {
+    "centre_lat": 45.065,
+    "centre_lon": 7.675,
+    "domain_bbox": [
+      50.45,
+      0.04,
+      39.68,
+      15.31
+    ],
+    "first_day": "2016-09-26",
+    "last_day": "2016-10-16",
+    "path": "/home/tanbnz/projects/raincheck/lake/era5/domain/torino_cp_lsp.nc",
+    "size_mb": 10.2
+  },
   "essen": {
     "centre_lat": 51.445,
     "centre_lon": 7.025,
@@ -10,7 +38,7 @@
     ],
     "first_day": "2017-03-27",
     "last_day": "2017-09-30",
-    "path": "/mnt/d/projects/rainCheck/lake/era5/domain/essen_cp_lsp.nc",
-    "size_mb": 31.9
+    "path": "/home/tanbnz/projects/raincheck/lake/era5/domain/essen_cp_lsp.nc",
+    "size_mb": 32.3
   }
 }

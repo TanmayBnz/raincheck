@@ -30,7 +30,16 @@ Outputs:
   reports/phase5_dose_response.md    -- the report
   reports/phase5_dose_response.json  -- headline figures + gate result
 
-Run:  python -m raincheck.analysis.dose_response
+Run:  python -m raincheck.analysis.dose_response                    # original split
+      python -m raincheck.analysis.dose_response --split expected   # Phase 5R / D8
+
+Phase 5R (D8). The original split labels an interval congested if the occupancy
+OBSERVED in that interval is above the detector's critical occupancy. Rain moves
+occupancy (the demand channel), so rain can push an interval across the line and
+the split partly measures selection. `--split expected` labels it from the
+detector's dry typical occupancy for that weekday and time bin instead: fixed
+before the rain arrives, so rain cannot move it. It writes to separate outputs
+and renders the two splits side by side; the original outputs are untouched.
 """
 
 from __future__ import annotations
@@ -57,6 +66,11 @@ REPORT_JSON = config.REPORTS_DIR / "phase5_dose_response.json"
 
 # Bootstrap replicates. 2,000 gives a stable 95% percentile interval; the cost
 # is small because resampling runs on ~10^5 pre-aggregated cells, not 2.9 M rows.
+PROFILE = config.BASELINE_PROFILE
+CELLS_EXPECTED = config.LAKE_ROOT / "analysis" / "dose_response_cells_expected"
+REPORT_EXPECTED = config.REPORTS_DIR / "phase5R_expected_state.md"
+REPORT_EXPECTED_JSON = config.REPORTS_DIR / "phase5R_expected_state.json"
+
 N_BOOT = 2000
 SEED = 20260827
 CI_PCT = 95.0
@@ -90,6 +104,34 @@ LEVEL_ORDER = {
 # ---------------------------------------------------------------------------
 # Stage 1 -- Spark: 2.9 M intervals down to (cluster x stratum) cells.
 # ---------------------------------------------------------------------------
+def with_expected_state(df, profile):
+    """Replace the realised `congested` flag with the expected one.
+
+    Expected = the detector's dry-median occupancy for this weekday and time bin
+    against its critical occupancy. Both come from dry intervals / the detector
+    itself, so neither can be moved by the rain in the interval being labelled.
+
+    Left join, and a profile cell that failed its observation floor yields NULL,
+    which `cluster_cells` already drops -- an unknowable expected state is
+    excluded, not guessed.
+    """
+    prof = profile.select(
+        "city", "detid", "dow", "tbin",
+        F.when(F.col("cell_ok"), F.col("typical_occ")).alias("typical_occ"),
+    )
+    return (
+        df.drop("congested")
+        .join(prof, ["city", "detid", "dow", "tbin"], "left")
+        .withColumn(
+            "congested",
+            F.when(
+                F.col("typical_occ").isNotNull() & F.col("occ_crit").isNotNull(),
+                F.col("typical_occ") >= F.col("occ_crit"),
+            ),
+        )
+    )
+
+
 def cluster_cells(df):
     """Aggregate to the finest grain the bootstrap needs.
 
@@ -536,7 +578,7 @@ def render(results, meta):
 # ---------------------------------------------------------------------------
 # Stage 4 -- orchestration.
 # ---------------------------------------------------------------------------
-def load(spark):
+def load(spark, split="realised"):
     """Pull the cluster x stratum grid into numpy.
 
     Spark does the part that is genuinely large -- 2.9 M intervals down to ~10^5
@@ -544,8 +586,10 @@ def load(spark):
     times inside Spark would mean 2,000 shuffles to save a collect of a few
     megabytes.
     """
-    cells = cluster_cells(spark.read.parquet(config.spark_path(ANALYSIS)))
-    rows = cells.collect()
+    df = spark.read.parquet(config.spark_path(ANALYSIS))
+    if split == "expected":
+        df = with_expected_state(df, spark.read.parquet(config.spark_path(PROFILE)))
+    rows = cluster_cells(df).collect()
     if not rows:
         raise SystemExit("FAIL: no cells survived preparation")
 
@@ -622,14 +666,50 @@ CELL_SCHEMA = ("view string, level string, band string, measure string, "
                "n_clusters int, n_clusters_ref int, n_intervals int")
 
 
+def side_by_side(results, original):
+    """Original (realised) vs expected-state split, congested view, per measure.
+
+    `original` is the persisted cell table of the realised run. The gap between
+    the two columns is how much of the original split was selection.
+    """
+    old = {(r["view"], r["level"], r["band"], r["measure"]): r for r in original}
+    L = ["## Original vs expected-state split", "",
+         "Contrast against Dry, percentage points, point estimates. `orig` is the "
+         "realised-occupancy split from `phase5_dose_response.md`; `exp` is the "
+         "expected-state split. Intervals for `exp` are in the tables above.", ""]
+    for view in ("congested", "city_congested"):
+        for m in ("speed", "flow"):
+            L += [f"### {view}, {m}", "",
+                  "| stratum | band | orig | exp | change |", "|---|---|---|---|---|"]
+            for r in results:
+                if r["view"] != view or r[m] is None:
+                    continue
+                o = old.get((view, r["level"], r["band"], m))
+                if o is None or o["estimate"] is None:
+                    continue
+                e, b = r[m]["estimate"], o["estimate"]
+                L.append(f"| {r['level']} | {r['band']} | {pp(b)} | {pp(e)} | {pp(e - b)} |")
+            L.append("")
+    return L
+
+
 def main() -> int:
     from datetime import datetime, timezone
+
+    split = "expected" if "--split=expected" in sys.argv or (
+        "--split" in sys.argv and sys.argv[sys.argv.index("--split") + 1] == "expected"
+    ) else "realised"
+    cells_out, report, report_json = (
+        (CELLS_EXPECTED, REPORT_EXPECTED, REPORT_EXPECTED_JSON) if split == "expected"
+        else (CELLS, REPORT, REPORT_JSON)
+    )
 
     spark = config.get_spark("dose_response")
     spark.sparkContext.setLogLevel("WARN")
 
+    print(f"split: {split}")
     print("[1/4] aggregating to cluster x stratum cells")
-    data = load(spark)
+    data = load(spark, split)
     print(f"      {len(data['cluster_code']):,} cells, "
           f"{data['n_clusters']:,} detector-days")
 
@@ -638,7 +718,7 @@ def main() -> int:
 
     print("[3/4] persisting cells")
     spark.createDataFrame(flatten(results), schema=CELL_SCHEMA) \
-        .write.mode("overwrite").parquet(config.spark_path(CELLS))
+        .write.mode("overwrite").parquet(config.spark_path(cells_out))
 
     print("[4/4] report")
     meta = summarise(results, data)
@@ -667,8 +747,16 @@ def main() -> int:
     meta["verdict"] = "FAIL" if failures else "PASS"
     meta["failures"] = failures
 
-    REPORT.write_text(render(results, meta), encoding="utf-8")
-    REPORT_JSON.write_text(json.dumps(meta, indent=2), encoding="utf-8")
+    text = render(results, meta)
+    if split == "expected":
+        original = [r.asDict() for r in spark.read.parquet(config.spark_path(CELLS)).collect()]
+        text = text.replace(
+            "# Phase-5 Dose-Response — L3a",
+            "# Phase-5R Dose-Response, expected-state split — D8", 1,
+        )
+        text += "\n".join(side_by_side(results, original)) + "\n"
+    report.write_text(text, encoding="utf-8")
+    report_json.write_text(json.dumps(meta, indent=2), encoding="utf-8")
 
     print()
     print(f"detector-days      : {meta['n_clusters']:,}")
@@ -678,7 +766,7 @@ def main() -> int:
     print(f"suppressed (thin)  : {meta['n_suppressed']:,}")
     print(f"interval excl. zero: {meta['n_signif']:,}")
     print(f"median design effect: {meta['design_effect']:.2f}x")
-    print(f"wrote {REPORT}")
+    print(f"wrote {report}")
     for f in failures:
         print(f"FAIL: {f}")
     if not failures:
