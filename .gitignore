@@ -10,4 +10,5 @@ __pycache__/
 .env.*
 !.env.example
 vendor/
-.claude/logs/
+.claude/
+logs/
