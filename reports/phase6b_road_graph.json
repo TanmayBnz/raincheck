@@ -1,0 +1,186 @@
+{
+  "generated": "2026-10-17 13:55 UTC",
+  "results": {
+    "manchester": {
+      "junctions": 1378,
+      "edges": 2145,
+      "road_km": 357.3,
+      "sensors": 147,
+      "sensors_matched": 144,
+      "critical_km": 35.9,
+      "critical_covered_pct": 18.5,
+      "all_covered_pct": 7.4,
+      "top_gaps": [
+        {
+          "name": "Chester Road",
+          "cls": "trunk",
+          "len": 1963,
+          "b": 0.985
+        },
+        {
+          "name": "Mancunian Way",
+          "cls": "motorway",
+          "len": 2153,
+          "b": 0.7159
+        },
+        {
+          "name": "Oldham Road",
+          "cls": "trunk",
+          "len": 2611,
+          "b": 0.5739
+        },
+        {
+          "name": "Wharfside Way",
+          "cls": "trunk",
+          "len": 1437,
+          "b": 0.7457
+        },
+        {
+          "name": "Stretford Road",
+          "cls": "primary",
+          "len": 2290,
+          "b": 0.431
+        },
+        {
+          "name": "Bridgewater Way",
+          "cls": "trunk",
+          "len": 1215,
+          "b": 0.7574
+        },
+        {
+          "name": "Trafford Road",
+          "cls": "trunk",
+          "len": 1440,
+          "b": 0.5959
+        },
+        {
+          "name": "Hyde Road",
+          "cls": "trunk",
+          "len": 1771,
+          "b": 0.4046
+        }
+      ]
+    },
+    "torino": {
+      "junctions": 3641,
+      "edges": 5688,
+      "road_km": 1033.7,
+      "sensors": 339,
+      "sensors_matched": 328,
+      "critical_km": 103.5,
+      "critical_covered_pct": 30.8,
+      "all_covered_pct": 9.9,
+      "top_gaps": [
+        {
+          "name": "Strada di Settimo",
+          "cls": "secondary",
+          "len": 3471,
+          "b": 1.0
+        },
+        {
+          "name": "Via Nizza",
+          "cls": "tertiary",
+          "len": 2793,
+          "b": 0.6648
+        },
+        {
+          "name": "Corso Vercelli",
+          "cls": "secondary",
+          "len": 2081,
+          "b": 0.6504
+        },
+        {
+          "name": "Corso Unione Sovietica",
+          "cls": "primary",
+          "len": 2697,
+          "b": 0.49
+        },
+        {
+          "name": "Via Bologna",
+          "cls": "secondary",
+          "len": 1502,
+          "b": 0.759
+        },
+        {
+          "name": "Via Monginevro",
+          "cls": "tertiary",
+          "len": 2131,
+          "b": 0.5042
+        },
+        {
+          "name": "Via Venti Settembre",
+          "cls": "tertiary",
+          "len": 1584,
+          "b": 0.6782
+        },
+        {
+          "name": "Corso Orbassano",
+          "cls": "primary",
+          "len": 1676,
+          "b": 0.566
+        }
+      ]
+    },
+    "essen": {
+      "junctions": 1384,
+      "edges": 2197,
+      "road_km": 414.9,
+      "sensors": 36,
+      "sensors_matched": 36,
+      "critical_km": 41.6,
+      "critical_covered_pct": 9.0,
+      "all_covered_pct": 3.4,
+      "top_gaps": [
+        {
+          "name": "Bottroper Stra\u00dfe",
+          "cls": "primary",
+          "len": 4353,
+          "b": 0.6761
+        },
+        {
+          "name": "Gelsenkirchener Stra\u00dfe",
+          "cls": "secondary",
+          "len": 2382,
+          "b": 0.6705
+        },
+        {
+          "name": "Altendorfer Stra\u00dfe",
+          "cls": "primary",
+          "len": 2600,
+          "b": 0.5644
+        },
+        {
+          "name": "A 40",
+          "cls": "motorway",
+          "len": 2796,
+          "b": 0.4967
+        },
+        {
+          "name": "Frohnhauser Stra\u00dfe",
+          "cls": "secondary",
+          "len": 1130,
+          "b": 0.9173
+        },
+        {
+          "name": "Sch\u00fctzenbahn",
+          "cls": "primary",
+          "len": 900,
+          "b": 0.8535
+        },
+        {
+          "name": "Essener Stra\u00dfe",
+          "cls": "secondary",
+          "len": 1217,
+          "b": 0.6052
+        },
+        {
+          "name": "Hans-B\u00f6ckler-Stra\u00dfe",
+          "cls": "primary",
+          "len": 1255,
+          "b": 0.5653
+        }
+      ]
+    }
+  },
+  "failures": []
+}
