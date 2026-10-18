@@ -59,6 +59,7 @@ button { font: inherit; color: inherit; }
 .seg { display: inline-flex; background: rgba(13, 19, 26, 0.86); border: 1px solid var(--line); border-radius: 8px; padding: 3px; backdrop-filter: blur(6px); }
 .seg button { border: 0; background: none; padding: 5px 10px; border-radius: 6px; cursor: pointer; font-size: 13px; color: var(--ink-2); white-space: nowrap; }
 .seg button[aria-pressed="true"] { background: #1f2d3d; color: var(--ink); }
+.short, .key-btn { display: none; }
 .seg .lbl { padding: 5px 4px 5px 8px; font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-3); }
 .zoom { position: absolute; top: 12px; right: 12px; display: flex; flex-direction: column; gap: 4px; z-index: 2; }
 .zoom button { width: 32px; height: 32px; border-radius: 8px; border: 1px solid var(--line); background: rgba(13, 19, 26, 0.86); cursor: pointer; font: 500 16px var(--font-data); }
@@ -150,9 +151,30 @@ footer p { margin: 0 0 6px; max-width: 110ch; }
   .span-7, .span-5 { grid-column: span 12; }
 }
 @media (max-width: 640px) {
-  .brand h1 { font-size: 28px; }
-  .clock { text-align: left; }
-  .map { height: 62vh; min-height: 360px; }
+  body { font-size: 14px; }
+  .top { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: start; padding-block: 14px 10px; gap: 10px; }
+  .brand h1 { font-size: 26px; }
+  .brand p { font-size: 12.5px; }
+  .cities { grid-column: 1 / -1; grid-row: 2; }
+  .cities button { flex: 1; padding: 9px 6px; }
+  .clock .t { font-size: 22px; }
+  .clock .d { font-size: 11.5px; max-width: 140px; }
+  .map { height: 56vh; min-height: 340px; border-radius: 12px; }
+  .layers { top: 8px; left: 8px; gap: 4px; }
+  .seg .lbl, .long { display: none; }
+  .short { display: inline; }
+  .seg button { padding: 6px 9px; }
+  .zoom { top: 8px; right: 8px; }
+  .key-btn { display: block; }
+  .legend { display: none; left: 8px; bottom: 8px; max-width: calc(100% - 16px); }
+  .legend.open { display: flex; }
+  .timeline { gap: 10px; }
+  .play { width: 44px; height: 44px; }
+  .tl-keys { font-size: 11px; }
+  .now .big { font-size: 30px; }
+  .evidence { margin-top: 28px; }
+  .evidence > .card { padding: 16px; }
+  .evidence h2 { font-size: 19px; }
   .cov { grid-template-columns: minmax(0, 1fr); }
   .steps { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); row-gap: 16px; }
   .steps li + li { border-left: 0; padding-left: 0; }
@@ -194,15 +216,16 @@ footer p { margin: 0 0 6px; max-width: 110ch; }
         </div>
         <div class="seg" role="group" aria-label="Map layers">
           <button id="show-sensors" aria-pressed="true">Traffic</button>
-          <button id="show-gaps" aria-pressed="true">Unmonitored critical roads</button>
+          <button id="show-gaps" aria-pressed="true"><span class="long">Unmonitored critical roads</span><span class="short">Gaps</span></button>
         </div>
       </div>
       <div class="zoom">
         <button id="zoom-in" aria-label="Zoom in">+</button>
         <button id="zoom-out" aria-label="Zoom out">−</button>
         <button id="zoom-reset" aria-label="Reset view">⤢</button>
+        <button id="key-toggle" class="key-btn" aria-label="Show map key" aria-expanded="false">?</button>
       </div>
-      <div class="legend" aria-hidden="true">
+      <div class="legend" id="legend" aria-hidden="true">
         <span class="k"><span class="ramp"></span>Road importance</span>
         <span class="k"><span class="rainramp"></span>Rain</span>
         <span class="k"><span class="ln" style="background:var(--slow)"></span>5–15% slower</span>
@@ -664,7 +687,9 @@ footer p { margin: 0 0 6px; max-width: 110ch; }
     el("path", { d: area, fill: "rgba(229,72,77,0.45)", stroke: "#e5484d", "stroke-width": 1 });
     el("path", { d: path("coarse", RY), fill: "none", stroke: "#d95926", "stroke-width": 2, "stroke-linejoin": "round" });
     el("path", { d: path("rainMean", RY), fill: "none", stroke: "#3987e5", "stroke-width": 2, "stroke-linejoin": "round" });
-    for (let i = 0; i < n; i += 12) el("text", { ...mono, x: X(i), y: h - 2, "text-anchor": "middle" }, g.replay.times[i]);
+    // A label every 2 h on a wide screen, every 4 h on a phone, so they never touch.
+    const step = w < 520 ? 24 : 12;
+    for (let i = 0; i < n; i += step) el("text", { ...mono, x: X(i), y: h - 2, "text-anchor": i === 0 ? "start" : "middle" }, g.replay.times[i]);
     const head = el("g", {});
     TL = { X, n, w, h, pl, pr, head, s1, r0 };
     drawTimelineHead();
@@ -712,14 +737,14 @@ footer p { margin: 0 0 6px; max-width: 110ch; }
   // ---------- map interaction ----------
   const tip = $("map-tip");
   let drag = null;
-  function nearestSensor(g, P, mx, my) {
-    let best = null, bd = 10;
+  function nearestSensor(g, P, mx, my, slack = 1) {
+    let best = null, bd = 10 * slack;
     if (!state.sensors) return null;
     for (const s of g.sensors) { const [px, py] = P.f(s.x, s.y); const d = Math.hypot(px - mx, py - my); if (d < bd) { bd = d; best = s; } }
     return best;
   }
-  function nearestRoad(g, P, mx, my) {
-    let best = null, bd = 6;
+  function nearestRoad(g, P, mx, my, slack = 1) {
+    let best = null, bd = 6 * slack;
     for (let k = g.edges.length - 1; k >= 0; k--) {
       const e = g.edges[k];
       for (let j = 1; j < e.pts.length; j++) {
@@ -743,23 +768,27 @@ footer p { margin: 0 0 6px; max-width: 110ch; }
     const g = cache[state.city]; if (!g) return;
     const r = canvas.getBoundingClientRect(), mx = e.clientX - r.left, my = e.clientY - r.top;
     if (drag) { state.panX = drag.px + (mx - drag.x); state.panY = drag.py + (my - drag.y); roadsDirty = true; draw(); tip.hidden = true; return; }
+    if (e.pointerType === "mouse") inspect(g, mx, my);
+  });
+  // Hover on a mouse, tap on a touch screen: same readout.
+  function inspect(g, mx, my, slack = 1) {
     const P = project(g), i = state.frame;
-    const s = nearestSensor(g, P, mx, my);
+    const s = nearestSensor(g, P, mx, my, slack);
     if (s) {
       const dev = s.dev[i];
       const line = s.speed[i] == null ? "No reading at this time" :
         `<span class="v">${Math.round(s.speed[i])} km/h</span>` + (s.normal[i] ? ` · normal <span class="v">${Math.round(s.normal[i])}</span>` : "") + (dev != null ? ` · <span class="v">${pct(dev)}</span>` : " · no normal for this hour");
-      showTip(`<strong>${esc(s.road)}</strong>${line}<br>Rain here: <span class="v">${fmt1(s.rain[i])} mm/h</span><br><span style="color:var(--ink-3)">Click to follow this sensor</span>`, mx, my);
-      canvas.style.cursor = "pointer"; return;
+      showTip(`<strong>${esc(s.road)}</strong>${line}<br>Rain here: <span class="v">${fmt1(s.rain[i])} mm/h</span><br><span style="color:var(--ink-3)">Click or tap to follow this sensor</span>`, mx, my);
+      canvas.style.cursor = "pointer"; return s;
     }
-    const road = nearestRoad(g, P, mx, my);
+    const road = nearestRoad(g, P, mx, my, slack);
     if (road) {
       const top = Math.round((1 - road.rank) * 100);
       showTip(`<strong>${esc(road.name || "Unnamed " + road.cls)}</strong>${esc(road.cls)} · ${top <= 1 ? "among the most critical roads" : `top ${top}% by importance`}<br>${road.s ? "Has a sensor" : road.crit ? '<span style="color:#a99ff0">Critical road with no sensor</span>' : "No sensor"}`, mx, my);
-      canvas.style.cursor = "grab"; return;
+      canvas.style.cursor = "grab"; return null;
     }
-    tip.hidden = true; canvas.style.cursor = "grab";
-  });
+    tip.hidden = true; canvas.style.cursor = "grab"; return null;
+  }
   canvas.addEventListener("pointerleave", () => { tip.hidden = true; });
   canvas.addEventListener("pointerdown", (e) => {
     const r = canvas.getBoundingClientRect();
@@ -770,7 +799,11 @@ footer p { margin: 0 0 6px; max-width: 110ch; }
     const r = canvas.getBoundingClientRect(), mx = e.clientX - r.left, my = e.clientY - r.top;
     const moved = drag && Math.hypot(mx - drag.x, my - drag.y) > 4;
     drag = null; canvas.classList.remove("dragging");
-    if (!moved) { const g = cache[state.city]; const s = g && nearestSensor(g, project(g), mx, my); if (s) select(s.id); }
+    if (!moved) {
+      const g = cache[state.city]; if (!g) return;
+      const s = e.pointerType === "mouse" ? nearestSensor(g, project(g), mx, my) : inspect(g, mx, my, 2.5);
+      if (s) select(s.id);
+    }
   });
   canvas.addEventListener("dblclick", (e) => { const r = canvas.getBoundingClientRect(); zoomAt(1.6, e.clientX - r.left, e.clientY - r.top); });
   function zoomAt(f, mx = W / 2, my = H / 2) {
@@ -781,6 +814,10 @@ footer p { margin: 0 0 6px; max-width: 110ch; }
   }
   function resetView() { state.zoom = 1; state.panX = 0; state.panY = 0; roadsDirty = true; draw(); }
   $("zoom-in").addEventListener("click", () => zoomAt(1.5));
+  $("key-toggle").addEventListener("click", () => {
+    const open = $("legend").classList.toggle("open");
+    $("key-toggle").setAttribute("aria-expanded", String(open));
+  });
   $("zoom-out").addEventListener("click", () => zoomAt(1 / 1.5));
   $("zoom-reset").addEventListener("click", () => { state.highlight = null; renderGaps(); resetView(); });
 

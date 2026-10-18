@@ -12,3 +12,6 @@ __pycache__/
 vendor/
 .claude/
 logs/
+.playwright-mcp/
+site/
+.vercel/
