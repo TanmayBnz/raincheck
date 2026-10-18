@@ -19,8 +19,9 @@
   --road-hi: #f2f7ff;     /* most critical road */
   --rain: #3987e5;        /* 2 km rain, timeline series 1 */
   --coarse: #d95926;      /* 31 km rain, timeline series 2 */
-  --slow: #ec835a;        /* sensor slower than normal */
-  --slower: #e66767;      /* sensor much slower */
+  --slow: #f0a33a;        /* 5-15% slower than normal */
+  --slower: #e5484d;      /* 15-30% slower */
+  --severe: #ff2e4d;      /* 30%+ slower */
   --normal: #6a7c8e;      /* sensor at or above normal */
   --gap: #9085e9;         /* critical road with no sensor */
   --font-display: "Archivo", "Arial Narrow", system-ui, sans-serif;
@@ -191,7 +192,7 @@ footer p { margin: 0 0 6px; max-width: 110ch; }
           <button id="rain-off" data-rain="off" aria-pressed="false">Off</button>
         </div>
         <div class="seg" role="group" aria-label="Map layers">
-          <button id="show-sensors" aria-pressed="true">Sensors</button>
+          <button id="show-sensors" aria-pressed="true">Traffic</button>
           <button id="show-gaps" aria-pressed="true">Unmonitored critical roads</button>
         </div>
       </div>
@@ -204,8 +205,9 @@ footer p { margin: 0 0 6px; max-width: 110ch; }
         <span class="k"><span class="ramp"></span>Road importance</span>
         <span class="k"><span class="rainramp"></span>Rain</span>
         <span class="k"><span class="dot" style="background:var(--normal)"></span>Normal</span>
-        <span class="k"><span class="dot" style="background:var(--slow)"></span>Slower</span>
-        <span class="k"><span class="dot" style="background:var(--slower);box-shadow:0 0 0 3px rgba(230,103,103,.35)"></span>15%+ slower</span>
+        <span class="k"><span class="dot" style="background:var(--slow)"></span>5–15% slower</span>
+        <span class="k"><span class="dot" style="background:var(--slower)"></span>15–30%</span>
+        <span class="k"><span class="dot" style="background:var(--severe);box-shadow:0 0 0 3px rgba(255,46,77,.35)"></span>30%+</span>
         <span class="k"><span class="ring"></span>No normal for this hour</span>
         <span class="k"><span class="dash"></span>Critical, no sensor</span>
       </div>
@@ -222,7 +224,7 @@ footer p { margin: 0 0 6px; max-width: 110ch; }
         <div class="tl-keys">
           <span class="k"><i style="background:var(--rain)"></i>Rain at sensors, 2 km average</span>
           <span class="k"><i style="background:var(--coarse)"></i>Rain, 31 km reanalysis</span>
-          <span class="k"><i style="background:var(--slower);height:8px;opacity:.6"></i>Share of sensors 15%+ slower</span>
+          <span class="k"><i style="background:var(--slower);height:8px;opacity:.7"></i>Share of sensors 15%+ slower</span>
         </div>
       </div>
     </section>
@@ -324,10 +326,12 @@ footer p { margin: 0 0 6px; max-width: 110ch; }
   };
   const ROAD = [[0, "#283748"], [0.35, "#46607d"], [0.65, "#8fb0cf"], [1, "#f2f7ff"]];
   const RAIN = [[0, "#184f95"], [0.4, "#3987e5"], [0.75, "#86b6ef"], [1, "#cde2fb"]];
-  const SENSOR = [[0, "#6a7c8e"], [0.2, "#e0a03a"], [0.55, "#ec835a"], [1, "#e66767"]];
+  // Traffic state in steps, as on a traffic map: normal, slower, much slower, severe.
+  const LEVELS = [hex("#6a7c8e"), hex("#f0a33a"), hex("#e5484d"), hex("#ff2e4d")];
+  const level = (dev) => (dev == null || dev > -0.05 ? 0 : dev > -0.15 ? 1 : dev > -0.30 ? 2 : 3);
   const rainT = (v) => Math.min(1, Math.log1p(v) / Math.log1p(25));
   const rainRGBA = (v) => { const t = rainT(v), c = mix(RAIN, t); return [c[0], c[1], c[2], Math.round(255 * (0.08 + 0.62 * t * t + 0.1 * t))]; };
-  const sensorRGB = (dev) => { const t = dev >= -0.03 ? 0 : Math.min(1, (-dev - 0.03) / 0.3); return mix(SENSOR, t); };
+  const sensorRGB = (dev) => LEVELS[level(dev)];
   const rgb = (c, a = 1) => `rgba(${c[0]},${c[1]},${c[2]},${a})`;
 
   // ---------- data ----------
@@ -343,13 +347,13 @@ footer p { margin: 0 0 6px; max-width: 110ch; }
     const lat0 = graph.edges[0].c[0][1];
     const kx = Math.cos(lat0 * Math.PI / 180);
     let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
-    const edges = graph.edges.map((e) => {
+    const edges = graph.edges.map((e, oi) => {
       const pts = e.c.map(([lon, lat]) => {
         const x = lon * kx, y = lat;
         if (x < minX) minX = x; if (x > maxX) maxX = x; if (y < minY) minY = y; if (y > maxY) maxY = y;
         return [x, y];
       });
-      return { ...e, pts };
+      return { ...e, oi, pts };
     }).sort((a, b) => a.b - b.b);
     // Percentile of each road's importance, for the tooltip.
     edges.forEach((e, i) => { e.rank = i / Math.max(1, edges.length - 1); });
@@ -357,8 +361,17 @@ footer p { margin: 0 0 6px; max-width: 110ch; }
     const gsens = new Map(graph.sensors.map((s) => [s.id, s]));
     const sensors = replay.sensors.map((s) => {
       const g = gsens.get(s.id);
-      return { ...s, x: g.lon * kx, y: g.lat, road: (g.edge != null && byIndex[g.edge]) || "Unnamed road" };
+      return { ...s, x: g.lon * kx, y: g.lat, edge: g.edge, road: (g.edge != null && byIndex[g.edge]) || "Unnamed road" };
     });
+    // Road links that carry a sensor take that sensor's state; with two
+    // sensors (one per direction) the link shows the slower one.
+    const byOi = new Map(edges.map((e) => [e.oi, e]));
+    const linked = new Map();
+    for (const s of sensors) if (s.edge != null && byOi.has(s.edge)) {
+      if (!linked.has(s.edge)) linked.set(s.edge, { edge: byOi.get(s.edge), sensors: [] });
+      linked.get(s.edge).sensors.push(s);
+    }
+    const trafficEdges = [...linked.values()];
     const n = replay.times.length;
     const stats = Array.from({ length: n }, (_, i) => {
       let rep = 0, flag = 0, rainSum = 0, rainN = 0, rainMax = 0;
@@ -375,7 +388,7 @@ footer p { margin: 0 0 6px; max-width: 110ch; }
     let best = 0, bestScore = -1;
     stats.forEach((s, i) => { const sc = (s.share || 0) * Math.min(1, (s.rainMean || 0) / 2) + (s.rainMax || 0) / 1000; if (sc > bestScore) { bestScore = sc; best = i; } });
     const gaps = summary.coverage[city].top_gaps;
-    const g = { city, replay, edges, sensors, stats, gaps, kx, bounds: { minX, maxX, minY, maxY }, startFrame: best };
+    const g = { city, replay, edges, sensors, trafficEdges, stats, gaps, kx, bounds: { minX, maxX, minY, maxY }, startFrame: best };
     cache[city] = g;
     return g;
   }
@@ -468,6 +481,26 @@ footer p { margin: 0 0 6px; max-width: 110ch; }
     ctx.drawImage(rainImg, ax - cx, ay - cy, bx - ax + 2 * cx, by - ay + 2 * cy);
   }
 
+  function drawTraffic(g, P) {
+    if (!state.sensors) return;
+    const i = state.frame, zw = Math.sqrt(Math.min(state.zoom, 4));
+    ctx.lineCap = "round"; ctx.lineJoin = "round";
+    for (const L of [1, 2, 3]) {           // severe on top
+      for (const te of g.trafficEdges) {
+        let worst = null;
+        for (const s of te.sensors) if (s.dev[i] != null && (worst == null || s.dev[i] < worst)) worst = s.dev[i];
+        if (level(worst) !== L) continue;
+        ctx.beginPath();
+        te.edge.pts.forEach(([x, y], k) => { const [px, py] = P.f(x, y); k ? ctx.lineTo(px, py) : ctx.moveTo(px, py); });
+        const c = LEVELS[L];
+        ctx.shadowColor = rgb(c, L === 1 ? 0.35 : 0.8); ctx.shadowBlur = L === 1 ? 4 : 10;
+        ctx.strokeStyle = rgb(c); ctx.lineWidth = (L === 1 ? 2.4 : 3.4) * zw;
+        ctx.stroke();
+      }
+    }
+    ctx.shadowBlur = 0;
+  }
+
   function sensorRadius() { return 3.1 * Math.min(1.8, Math.sqrt(state.zoom)); }
 
   function drawSensors(g, P, t) {
@@ -484,7 +517,10 @@ footer p { margin: 0 0 6px; max-width: 110ch; }
         ctx.lineWidth = 1.4; ctx.stroke(); continue;
       }
       const c = sensorRGB(dev);
-      if (dev <= FLAG) {
+      if (level(dev) === 0) { ctx.fillStyle = rgb(c, 0.85); ctx.fill(); ctx.lineWidth = 1; ctx.strokeStyle = "#0b1016"; ctx.stroke();
+        if (state.selected === s.id) { ctx.beginPath(); ctx.arc(px, py, r + 4, 0, Math.PI * 2); ctx.strokeStyle = "#f2f7ff"; ctx.lineWidth = 1.6; ctx.stroke(); }
+        continue; }
+      if (level(dev) >= 2) {
         ctx.save(); ctx.beginPath(); ctx.arc(px, py, r + 3 + 3 * pulse, 0, Math.PI * 2);
         ctx.fillStyle = rgb(c, 0.16 + 0.14 * (1 - pulse)); ctx.fill(); ctx.restore();
         ctx.beginPath(); ctx.arc(px, py, r, 0, Math.PI * 2);
@@ -505,6 +541,7 @@ footer p { margin: 0 0 6px; max-width: 110ch; }
     if (roadsDirty) drawRoads(g, P);
     drawRain(g, P);
     ctx.drawImage(roadLayer, 0, 0, W, H);
+    drawTraffic(g, P);
     drawSensors(g, P, t);
   }
   function loop(t) {
@@ -652,7 +689,7 @@ footer p { margin: 0 0 6px; max-width: 110ch; }
       area += `L${X(i).toFixed(1)},${SY(Math.min(0.5, s.share)).toFixed(1)}`; on = true;
     });
     if (on) area += `L${X(n - 1).toFixed(1)},${s1}Z`;
-    el("path", { d: area, fill: "rgba(230,103,103,0.45)", stroke: "#e66767", "stroke-width": 1 });
+    el("path", { d: area, fill: "rgba(229,72,77,0.45)", stroke: "#e5484d", "stroke-width": 1 });
     el("path", { d: path("coarse", RY), fill: "none", stroke: "#d95926", "stroke-width": 2, "stroke-linejoin": "round" });
     el("path", { d: path("rainMean", RY), fill: "none", stroke: "#3987e5", "stroke-width": 2, "stroke-linejoin": "round" });
     for (let i = 0; i < n; i += 12) el("text", { ...mono, x: X(i), y: h - 2, "text-anchor": "middle" }, g.replay.times[i]);
