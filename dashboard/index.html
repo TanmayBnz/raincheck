@@ -1,0 +1,910 @@
+<meta charset="utf-8">
+<title>RainCheck Monitor</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,500..800&family=IBM+Plex+Mono:wght@400;500&family=Public+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout: a control-room wall. The city map is the stage; a rail reads out
+   "this moment"; a timeline scrubs the storm day; evidence sits below.
+   Single dark world by design: glowing roads need a night ground. */
+:root {
+  color-scheme: dark;
+  --ground: #0b1016;      /* page */
+  --panel: #111922;       /* raised surfaces */
+  --line: #1f2b38;        /* hairlines */
+  --ink: #e6edf3;         /* primary text */
+  --ink-2: #9fb0c1;       /* secondary text */
+  --ink-3: #6a7c8e;       /* captions, axes */
+  --road-hi: #f2f7ff;     /* most critical road */
+  --rain: #3987e5;        /* 2 km rain, timeline series 1 */
+  --coarse: #d95926;      /* 31 km rain, timeline series 2 */
+  --slow: #ec835a;        /* sensor slower than normal */
+  --slower: #e66767;      /* sensor much slower */
+  --normal: #6a7c8e;      /* sensor at or above normal */
+  --gap: #9085e9;         /* critical road with no sensor */
+  --font-display: "Archivo", "Arial Narrow", system-ui, sans-serif;
+  --font-body: "Public Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-data: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+html, body { background: var(--ground); color: var(--ink); }
+body { font: 15px/1.5 var(--font-body); }
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--ground); }
+.wrap { padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); max-width: 1480px; margin: 0 auto; }
+button { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--rain); outline-offset: 2px; }
+
+/* ---- header ---- */
+.top { display: flex; flex-wrap: wrap; align-items: end; justify-content: space-between; gap: 12px 24px; padding-block: 20px 14px; }
+.brand { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.brand h1 { margin: 0; font: 800 34px/1 var(--font-display); font-stretch: 112%; letter-spacing: -0.01em; }
+.brand h1 span { color: var(--rain); }
+.brand p { margin: 0; color: var(--ink-2); font-size: 14px; }
+.cities { display: flex; gap: 4px; padding: 4px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; }
+.cities button { border: 0; background: none; padding: 7px 14px; border-radius: 7px; cursor: pointer; font: 600 14px var(--font-display); font-stretch: 100%; color: var(--ink-2); }
+.cities button[aria-pressed="true"] { background: #1c2836; color: var(--ink); }
+.cities button:hover { color: var(--ink); }
+.clock { text-align: right; min-width: 0; }
+.clock .t { font: 500 30px/1 var(--font-data); font-variant-numeric: tabular-nums; }
+.clock .d { color: var(--ink-2); font-size: 13px; }
+
+/* ---- stage ---- */
+.stage { display: grid; grid-template-columns: minmax(0, 1fr) 330px; gap: 14px; align-items: start; }
+.left { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.map { position: relative; min-width: 0; height: min(68vh, 680px); min-height: 420px; background: radial-gradient(120% 90% at 50% 45%, #101823 0%, #0b1016 70%); border: 1px solid var(--line); border-radius: 14px; overflow: hidden; touch-action: none; }
+.map canvas { position: absolute; inset: 0; width: 100%; height: 100%; cursor: grab; }
+.map canvas.dragging { cursor: grabbing; }
+.layers { position: absolute; top: 12px; left: 12px; display: flex; flex-wrap: wrap; gap: 6px; z-index: 2; max-width: calc(100% - 100px); }
+.seg { display: inline-flex; background: rgba(13, 19, 26, 0.86); border: 1px solid var(--line); border-radius: 8px; padding: 3px; backdrop-filter: blur(6px); }
+.seg button { border: 0; background: none; padding: 5px 10px; border-radius: 6px; cursor: pointer; font-size: 13px; color: var(--ink-2); white-space: nowrap; }
+.seg button[aria-pressed="true"] { background: #1f2d3d; color: var(--ink); }
+.seg .lbl { padding: 5px 4px 5px 8px; font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-3); }
+.zoom { position: absolute; top: 12px; right: 12px; display: flex; flex-direction: column; gap: 4px; z-index: 2; }
+.zoom button { width: 32px; height: 32px; border-radius: 8px; border: 1px solid var(--line); background: rgba(13, 19, 26, 0.86); cursor: pointer; font: 500 16px var(--font-data); }
+.legend { position: absolute; left: 12px; bottom: 12px; z-index: 2; display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; padding: 8px 12px; background: rgba(13, 19, 26, 0.86); border: 1px solid var(--line); border-radius: 10px; font-size: 12px; color: var(--ink-2); max-width: calc(100% - 24px); backdrop-filter: blur(6px); }
+.legend .k { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+.legend .ramp { width: 64px; height: 6px; border-radius: 3px; background: linear-gradient(90deg, #283748, #46607d 35%, #8fb0cf 65%, var(--road-hi)); }
+.legend .rainramp { width: 54px; height: 8px; border-radius: 3px; background: linear-gradient(90deg, rgba(24,79,149,.5), rgba(57,135,229,.75), rgba(134,182,239,.9), #cde2fb); }
+.dot { width: 9px; height: 9px; border-radius: 50%; display: inline-block; }
+.ring { width: 9px; height: 9px; border-radius: 50%; border: 1.5px solid var(--normal); display: inline-block; }
+.dash { width: 20px; height: 0; border-top: 2px dashed var(--gap); display: inline-block; }
+.coarse-note { position: absolute; right: 12px; bottom: 12px; z-index: 2; max-width: 250px; padding: 8px 12px; border-radius: 10px; background: rgba(13, 19, 26, 0.9); border: 1px solid rgba(217, 89, 38, 0.5); font-size: 12px; color: var(--ink-2); }
+.coarse-note b { color: var(--ink); font-family: var(--font-data); font-weight: 500; }
+.loading { position: absolute; inset: 0; display: grid; place-items: center; color: var(--ink-3); font: 500 13px var(--font-data); letter-spacing: 0.06em; }
+.tip { position: absolute; z-index: 5; pointer-events: none; min-width: 180px; max-width: 260px; padding: 9px 11px; border-radius: 9px; background: #0d141c; border: 1px solid #2a3a4c; box-shadow: 0 8px 24px rgba(0,0,0,.45); font-size: 12.5px; color: var(--ink-2); }
+.tip strong { display: block; color: var(--ink); font: 600 13.5px var(--font-body); margin-bottom: 3px; }
+.tip .v { font-family: var(--font-data); color: var(--ink); }
+
+/* ---- rail ---- */
+.rail { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 14px 16px; min-width: 0; }
+.eyebrow { margin: 0 0 8px; font: 600 11px var(--font-body); letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink-3); }
+.now { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.now .big { font: 700 34px/1 var(--font-display); font-stretch: 90%; font-variant-numeric: tabular-nums; }
+.now .big small { font: 500 14px var(--font-data); color: var(--ink-3); }
+.now .cap { font-size: 12.5px; color: var(--ink-2); margin-top: 4px; }
+.now .full { grid-column: 1 / -1; display: flex; justify-content: space-between; gap: 8px; padding-top: 10px; border-top: 1px solid var(--line); font-size: 12.5px; color: var(--ink-2); }
+.now .full .v { font-family: var(--font-data); color: var(--ink); }
+.flag { display: inline-flex; align-items: center; gap: 6px; }
+.list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.list li { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: baseline; padding: 6px 0; border-top: 1px solid var(--line); font-size: 13.5px; }
+.list li:first-child { border-top: 0; }
+.list .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.list .val { font: 500 12.5px var(--font-data); font-variant-numeric: tabular-nums; color: var(--ink-2); }
+.list button { all: unset; cursor: pointer; display: contents; }
+.list li.clickable:hover .name, .list li.on .name { color: var(--gap); }
+.list li.clickable { cursor: pointer; }
+.empty { color: var(--ink-3); font-size: 13px; padding: 4px 0; }
+.sel { display: flex; flex-direction: column; gap: 6px; }
+.sel-head { display: flex; justify-content: space-between; gap: 8px; align-items: start; }
+.sel-head h3 { margin: 0; font: 600 15px var(--font-body); }
+.sel-head button { border: 1px solid var(--line); background: none; border-radius: 6px; padding: 2px 8px; cursor: pointer; color: var(--ink-2); font-size: 12px; }
+.sel svg { width: 100%; height: auto; display: block; }
+
+/* ---- timeline ---- */
+.timeline { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 14px; align-items: center; }
+.play { width: 52px; height: 52px; border-radius: 50%; border: 1px solid #2c3d50; background: #152130; cursor: pointer; display: grid; place-items: center; }
+.play:hover { background: #1b2a3c; }
+.play svg { width: 18px; height: 18px; fill: var(--ink); }
+.tl { position: relative; min-width: 0; }
+.tl svg { width: 100%; display: block; overflow: visible; touch-action: none; cursor: ew-resize; }
+.tl input[type=range] { position: absolute; inset: 0; width: 100%; opacity: 0; pointer-events: none; }
+.tl-keys { display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: 12px; color: var(--ink-2); margin-top: 4px; }
+.tl-keys .k { display: inline-flex; align-items: center; gap: 6px; }
+.tl-keys i { width: 14px; height: 2px; display: inline-block; border-radius: 1px; }
+
+/* ---- evidence ---- */
+.evidence { margin-top: 44px; display: grid; gap: 14px; grid-template-columns: repeat(12, minmax(0, 1fr)); padding-bottom: 28px; }
+.evidence > .card { padding: 20px 22px; }
+.span-12 { grid-column: span 12; } .span-7 { grid-column: span 7; } .span-5 { grid-column: span 5; }
+.evidence h2 { margin: 0 0 6px; font: 700 22px/1.2 var(--font-display); font-stretch: 100%; text-wrap: balance; }
+.evidence p.lede { margin: 0 0 16px; color: var(--ink-2); max-width: 64ch; }
+.cov { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px; }
+.cov .city { min-width: 0; display: flex; flex-direction: column; gap: 8px; }
+.cov h3 { margin: 0; font: 600 13px var(--font-body); letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-2); }
+.cov .pct { font: 700 44px/1 var(--font-display); font-stretch: 90%; font-variant-numeric: tabular-nums; }
+.cov .pct small { font: 500 14px var(--font-body); color: var(--ink-3); margin-left: 4px; }
+.bar { height: 8px; border-radius: 4px; background: repeating-linear-gradient(135deg, rgba(144,133,233,.55) 0 4px, rgba(144,133,233,.18) 4px 8px); overflow: hidden; display: flex; }
+.bar i { display: block; height: 100%; background: var(--road-hi); border-right: 2px solid var(--panel); }
+.cov .meta { font-size: 12.5px; color: var(--ink-2); }
+.cov ol { margin: 4px 0 0; padding-left: 18px; font-size: 13px; color: var(--ink-2); }
+.cov ol li::marker { color: var(--ink-3); font-family: var(--font-data); font-size: 11px; }
+.chart { position: relative; min-width: 0; }
+.chart svg { width: 100%; display: block; overflow: visible; }
+.chart .tip { position: absolute; }
+.note { margin: 12px 0 0; font-size: 12.5px; color: var(--ink-3); max-width: 70ch; }
+.steps { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 0; counter-reset: s; }
+.steps li { position: relative; padding: 0 16px 0 0; min-width: 0; counter-increment: s; }
+.steps li::before { content: counter(s); display: block; font: 500 11px var(--font-data); color: var(--ink-3); margin-bottom: 6px; }
+.steps li + li { padding-left: 16px; border-left: 1px solid var(--line); }
+.steps .n { font: 700 26px/1.1 var(--font-display); font-stretch: 88%; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.steps .c { font-size: 13px; color: var(--ink-2); margin-top: 4px; }
+footer { border-top: 1px solid var(--line); padding-block: 18px 32px; font-size: 12.5px; color: var(--ink-3); }
+footer p { margin: 0 0 6px; max-width: 110ch; }
+
+@media (max-width: 1080px) {
+  .stage { grid-template-columns: minmax(0, 1fr); }
+  .rail { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
+  .span-7, .span-5 { grid-column: span 12; }
+}
+@media (max-width: 640px) {
+  .brand h1 { font-size: 28px; }
+  .clock { text-align: left; }
+  .map { height: 62vh; min-height: 360px; }
+  .cov { grid-template-columns: minmax(0, 1fr); }
+  .steps { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); row-gap: 16px; }
+  .steps li + li { border-left: 0; padding-left: 0; }
+  .legend { font-size: 11px; gap: 6px 12px; }
+  .coarse-note { display: none; }
+  .layers { max-width: calc(100% - 64px); }
+}
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+</style>
+
+<div class="wrap">
+  <header class="top">
+    <div class="brand">
+      <h1>Rain<span>Check</span></h1>
+      <p>Rain-aware traffic monitor · every road against its own normal</p>
+    </div>
+    <nav class="cities" aria-label="City">
+      <button id="city-torino" data-city="torino" aria-pressed="true">Torino</button>
+      <button id="city-manchester" data-city="manchester" aria-pressed="false">Manchester</button>
+      <button id="city-essen" data-city="essen" aria-pressed="false">Essen</button>
+    </nav>
+    <div class="clock" aria-live="polite">
+      <div class="t" id="clock-time">--:--</div>
+      <div class="d" id="clock-date">Loading storm replay</div>
+    </div>
+  </header>
+
+  <main class="stage">
+   <div class="left">
+    <section class="map" id="map" aria-label="City road network map">
+      <canvas id="map-canvas"></canvas>
+      <div class="loading" id="map-loading">Loading road network</div>
+      <div class="layers">
+        <div class="seg" role="group" aria-label="Rain layer">
+          <span class="lbl">Rain</span>
+          <button id="rain-fine" data-rain="fine" aria-pressed="true">2 km</button>
+          <button id="rain-coarse" data-rain="coarse" aria-pressed="false">31 km</button>
+          <button id="rain-off" data-rain="off" aria-pressed="false">Off</button>
+        </div>
+        <div class="seg" role="group" aria-label="Map layers">
+          <button id="show-sensors" aria-pressed="true">Sensors</button>
+          <button id="show-gaps" aria-pressed="true">Unmonitored critical roads</button>
+        </div>
+      </div>
+      <div class="zoom">
+        <button id="zoom-in" aria-label="Zoom in">+</button>
+        <button id="zoom-out" aria-label="Zoom out">−</button>
+        <button id="zoom-reset" aria-label="Reset view">⤢</button>
+      </div>
+      <div class="legend" aria-hidden="true">
+        <span class="k"><span class="ramp"></span>Road importance</span>
+        <span class="k"><span class="rainramp"></span>Rain</span>
+        <span class="k"><span class="dot" style="background:var(--normal)"></span>Normal</span>
+        <span class="k"><span class="dot" style="background:var(--slow)"></span>Slower</span>
+        <span class="k"><span class="dot" style="background:var(--slower);box-shadow:0 0 0 3px rgba(230,103,103,.35)"></span>15%+ slower</span>
+        <span class="k"><span class="ring"></span>No normal for this hour</span>
+        <span class="k"><span class="dash"></span>Critical, no sensor</span>
+      </div>
+      <div class="coarse-note" id="coarse-note" hidden>Raw reanalysis rain comes as one value for the whole view: <b id="coarse-val">–</b>. The 2 km layer shows where in the city it falls.</div>
+      <div class="tip" id="map-tip" hidden></div>
+    </section>
+   <section class="timeline" aria-label="Storm day timeline">
+      <button class="play" id="play" aria-label="Play storm replay">
+        <svg viewBox="0 0 20 20" id="play-icon"><path d="M5 3l12 7-12 7z"/></svg>
+      </button>
+      <div class="tl">
+        <svg id="tl-svg" role="img" aria-label="Rain and slowdowns through the day"></svg>
+        <input type="range" id="tl-range" min="0" max="107" value="0" aria-label="Time of day">
+        <div class="tl-keys">
+          <span class="k"><i style="background:var(--rain)"></i>Rain at sensors, 2 km average</span>
+          <span class="k"><i style="background:var(--coarse)"></i>Rain, 31 km reanalysis</span>
+          <span class="k"><i style="background:var(--slower);height:8px;opacity:.6"></i>Share of sensors 15%+ slower</span>
+        </div>
+      </div>
+    </section>
+   </div>
+
+    <aside class="rail">
+      <section class="card" aria-labelledby="now-h">
+        <p class="eyebrow" id="now-h">This moment</p>
+        <div class="now">
+          <div>
+            <div class="big" id="now-flag">–</div>
+            <div class="cap">sensors 15%+ slower than normal</div>
+          </div>
+          <div>
+            <div class="big" id="now-rain">–<small> mm/h</small></div>
+            <div class="cap">heaviest rain at a sensor (2 km)</div>
+          </div>
+          <div class="full"><span>Sensors reporting</span><span class="v" id="now-rep">–</span></div>
+          <div class="full" style="border-top:0;padding-top:0"><span>31 km reanalysis, whole city</span><span class="v" id="now-coarse">–</span></div>
+        </div>
+      </section>
+      <section class="card" id="sel-card" hidden aria-live="polite">
+        <div class="sel" id="sel"></div>
+      </section>
+      <section class="card" aria-labelledby="slow-h">
+        <p class="eyebrow" id="slow-h">Slowest against normal, now</p>
+        <ul class="list" id="slow-list"></ul>
+      </section>
+      <section class="card" aria-labelledby="gap-h">
+        <p class="eyebrow" id="gap-h">Critical roads with no sensor</p>
+        <ul class="list" id="gap-list"></ul>
+      </section>
+    </aside>
+  </main>
+
+
+
+  <section class="evidence">
+    <article class="card span-12" aria-labelledby="cov-h">
+      <h2 id="cov-h">Where the next sensors should go</h2>
+      <p class="lede">Of all shortest routes between junctions, a few roads carry most of them. Those are the critical roads, the top tenth of road length by that measure. Most of them have no sensor.</p>
+      <div class="cov" id="cov"></div>
+    </article>
+
+    <article class="card span-7" aria-labelledby="eff-h">
+      <h2 id="eff-h">How much rain slows a free-flowing road</h2>
+      <p class="lede">Change in speed against each road's own dry-weather normal for that weekday and hour, across all three cities. Whiskers are 95% intervals.</p>
+      <div class="chart" id="eff"></div>
+      <p class="note">Filled dots: the interval stays below zero, a clear slowdown. Hollow dots: the interval crosses zero, so the change is within normal day-to-day variation.</p>
+    </article>
+
+    <article class="card span-5" aria-labelledby="abl-h">
+      <h2 id="abl-h">Why it flags slowdowns rather than forecasting them</h2>
+      <p class="lede">The same model, trained with and without rain data, predicting how far each reading strays from normal. Lower error is better.</p>
+      <div class="chart" id="abl"></div>
+      <p class="note" id="abl-note"></p>
+    </article>
+
+    <article class="card span-12" aria-labelledby="pipe-h">
+      <h2 id="pipe-h">Built from</h2>
+      <p class="lede">Raw loop-detector readings, checked at every stage so no row is lost without a reason.</p>
+      <ol class="steps" id="pipe"></ol>
+    </article>
+  </section>
+
+  <footer>
+    <p>Traffic: UTD19 loop-detector archive, ETH Zürich (Loder et al., 2019). Rain: ERA5 reanalysis, Copernicus Climate Change Service, downscaled to 2 km and 10 minutes with spateGAN-ERA5 (Glawion et al., 2025). Roads: © OpenStreetMap contributors, ODbL.</p>
+    <p>The 2 km rain is a model estimate, not a gauge measurement. Road importance is network structure (shortest-route share), not a traffic count. Map roads are current OpenStreetMap; traffic is from 2016–2017.</p>
+  </footer>
+</div>
+
+<script>
+(() => {
+  "use strict";
+  const $ = (id) => document.getElementById(id);
+  const CITY_NAMES = { torino: "Torino", manchester: "Manchester", essen: "Essen" };
+  const FLAG = -0.15;               // 15% or more below normal
+  const reduceMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const fmt1 = (v) => (v == null ? "–" : v.toFixed(1));
+  const pct = (v) => (v == null ? "–" : (v > 0 ? "+" : v < 0 ? "−" : "") + Math.abs(v * 100).toFixed(0) + "%");
+
+  const state = { city: "torino", frame: 0, playing: false, rain: "fine", sensors: true, gaps: true,
+                  highlight: null, selected: null, zoom: 1, panX: 0, panY: 0 };
+  const cache = {};
+  let summary = null;
+
+  // ---------- colour scales ----------
+  const hex = (h) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
+  const mix = (stops, t) => {
+    t = Math.max(0, Math.min(1, t));
+    for (let i = 1; i < stops.length; i++) {
+      if (t <= stops[i][0]) {
+        const [t0, c0] = stops[i - 1], [t1, c1] = stops[i];
+        const k = (t - t0) / (t1 - t0 || 1), a = hex(c0), b = hex(c1);
+        return a.map((v, j) => Math.round(v + (b[j] - v) * k));
+      }
+    }
+    return hex(stops[stops.length - 1][1]);
+  };
+  const ROAD = [[0, "#283748"], [0.35, "#46607d"], [0.65, "#8fb0cf"], [1, "#f2f7ff"]];
+  const RAIN = [[0, "#184f95"], [0.4, "#3987e5"], [0.75, "#86b6ef"], [1, "#cde2fb"]];
+  const SENSOR = [[0, "#6a7c8e"], [0.2, "#e0a03a"], [0.55, "#ec835a"], [1, "#e66767"]];
+  const rainT = (v) => Math.min(1, Math.log1p(v) / Math.log1p(25));
+  const rainRGBA = (v) => { const t = rainT(v), c = mix(RAIN, t); return [c[0], c[1], c[2], Math.round(255 * (0.08 + 0.62 * t * t + 0.1 * t))]; };
+  const sensorRGB = (dev) => { const t = dev >= -0.03 ? 0 : Math.min(1, (-dev - 0.03) / 0.3); return mix(SENSOR, t); };
+  const rgb = (c, a = 1) => `rgba(${c[0]},${c[1]},${c[2]},${a})`;
+
+  // ---------- data ----------
+  async function getJSON(name) {
+    const r = await fetch(name);
+    if (!r.ok) throw new Error(name + " " + r.status);
+    return r.json();
+  }
+
+  async function loadCity(city) {
+    if (cache[city]) return cache[city];
+    const [graph, replay] = await Promise.all([getJSON(`graph_${city}.json`), getJSON(`replay_${city}.json`)]);
+    const lat0 = graph.edges[0].c[0][1];
+    const kx = Math.cos(lat0 * Math.PI / 180);
+    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+    const edges = graph.edges.map((e) => {
+      const pts = e.c.map(([lon, lat]) => {
+        const x = lon * kx, y = lat;
+        if (x < minX) minX = x; if (x > maxX) maxX = x; if (y < minY) minY = y; if (y > maxY) maxY = y;
+        return [x, y];
+      });
+      return { ...e, pts };
+    }).sort((a, b) => a.b - b.b);
+    // Percentile of each road's importance, for the tooltip.
+    edges.forEach((e, i) => { e.rank = i / Math.max(1, edges.length - 1); });
+    const byIndex = graph.edges.map((e) => e.name);
+    const gsens = new Map(graph.sensors.map((s) => [s.id, s]));
+    const sensors = replay.sensors.map((s) => {
+      const g = gsens.get(s.id);
+      return { ...s, x: g.lon * kx, y: g.lat, road: (g.edge != null && byIndex[g.edge]) || "Unnamed road" };
+    });
+    const n = replay.times.length;
+    const stats = Array.from({ length: n }, (_, i) => {
+      let rep = 0, flag = 0, rainSum = 0, rainN = 0, rainMax = 0;
+      for (const s of sensors) {
+        if (s.dev[i] != null) { rep++; if (s.dev[i] <= FLAG) flag++; }
+        else if (s.speed[i] != null) rep++;
+        if (s.rain[i] != null) { rainSum += s.rain[i]; rainN++; if (s.rain[i] > rainMax) rainMax = s.rain[i]; }
+      }
+      const withNormal = sensors.filter((s) => s.dev[i] != null).length;
+      return { rep, flag, withNormal, share: withNormal ? flag / withNormal : null,
+               rainMean: rainN ? rainSum / rainN : null, rainMax, coarse: replay.coarse[i] };
+    });
+    // Open on the frame where rain and slowdowns coincide most.
+    let best = 0, bestScore = -1;
+    stats.forEach((s, i) => { const sc = (s.share || 0) * Math.min(1, (s.rainMean || 0) / 2) + (s.rainMax || 0) / 1000; if (sc > bestScore) { bestScore = sc; best = i; } });
+    const gaps = summary.coverage[city].top_gaps;
+    const g = { city, replay, edges, sensors, stats, gaps, kx, bounds: { minX, maxX, minY, maxY }, startFrame: best };
+    cache[city] = g;
+    return g;
+  }
+
+  // ---------- map ----------
+  const canvas = $("map-canvas"), ctx = canvas.getContext("2d");
+  const roadLayer = document.createElement("canvas"), rctx = roadLayer.getContext("2d");
+  const rainImg = document.createElement("canvas"), rainCtx = rainImg.getContext("2d");
+  let W = 0, H = 0, DPR = 1, roadsDirty = true;
+
+  function resize() {
+    const r = $("map").getBoundingClientRect();
+    DPR = Math.min(2, window.devicePixelRatio || 1);
+    W = r.width; H = r.height;
+    for (const c of [canvas, roadLayer]) { c.width = Math.round(W * DPR); c.height = Math.round(H * DPR); }
+    roadsDirty = true;
+    draw();
+  }
+
+  function baseScale(g) {
+    const b = g.bounds, pad = 28;
+    return Math.min((W - 2 * pad) / (b.maxX - b.minX), (H - 2 * pad) / (b.maxY - b.minY));
+  }
+  function project(g) {
+    const b = g.bounds, s = baseScale(g) * state.zoom;
+    const cx = (b.minX + b.maxX) / 2, cy = (b.minY + b.maxY) / 2;
+    return { s, f: (x, y) => [(x - cx) * s + W / 2 + state.panX, -(y - cy) * s + H / 2 + state.panY],
+             inv: (px, py) => [(px - W / 2 - state.panX) / s + cx, -(py - H / 2 - state.panY) / s + cy] };
+  }
+
+  function drawRoads(g, P) {
+    rctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+    rctx.clearRect(0, 0, W, H);
+    rctx.lineCap = "round"; rctx.lineJoin = "round";
+    const zw = Math.sqrt(Math.min(state.zoom, 4));
+    for (const e of g.edges) {
+      const t = Math.sqrt(e.b);
+      rctx.beginPath();
+      e.pts.forEach(([x, y], i) => { const [px, py] = P.f(x, y); i ? rctx.lineTo(px, py) : rctx.moveTo(px, py); });
+      if (t > 0.72) { rctx.shadowColor = "rgba(170,205,255,0.55)"; rctx.shadowBlur = 8; } else rctx.shadowBlur = 0;
+      rctx.strokeStyle = rgb(mix(ROAD, t), 0.7 + 0.3 * t);
+      rctx.lineWidth = (0.5 + 2.8 * t) * zw;
+      rctx.stroke();
+    }
+    rctx.shadowBlur = 0;
+    if (state.gaps || state.highlight) {
+      for (const e of g.edges) {
+        const hot = state.highlight && e.name === state.highlight && e.crit && !e.s;
+        if (!(hot || (state.gaps && e.crit && !e.s))) continue;
+        rctx.beginPath();
+        e.pts.forEach(([x, y], i) => { const [px, py] = P.f(x, y); i ? rctx.lineTo(px, py) : rctx.moveTo(px, py); });
+        if (hot) { rctx.setLineDash([]); rctx.shadowColor = "rgba(144,133,233,0.9)"; rctx.shadowBlur = 12; rctx.lineWidth = 4 * zw; rctx.strokeStyle = "#a99ff0"; }
+        else { rctx.setLineDash([4, 3]); rctx.shadowBlur = 0; rctx.lineWidth = 1.7 * zw; rctx.strokeStyle = "rgba(144,133,233,0.95)"; }
+        rctx.stroke();
+      }
+      rctx.setLineDash([]); rctx.shadowBlur = 0;
+    }
+    roadsDirty = false;
+  }
+
+  function drawRain(g, P) {
+    if (state.rain === "off") return;
+    const gr = g.replay.grid, i = state.frame;
+    const x0 = (gr.lon0 - gr.dlon / 2) * g.kx, x1 = (gr.lon0 + (gr.nlon - 0.5) * gr.dlon) * g.kx;
+    const y0 = gr.lat0 - gr.dlat / 2, y1 = gr.lat0 + (gr.nlat - 0.5) * gr.dlat;
+    const [ax, ay] = P.f(x0, y1), [bx, by] = P.f(x1, y0);
+    if (state.rain === "coarse") {
+      const v = g.replay.coarse[i];
+      if (v == null || v < 0.1) return;
+      const c = rainRGBA(v);
+      ctx.fillStyle = rgb(c, c[3] / 255);
+      ctx.fillRect(ax, ay, bx - ax, by - ay);
+      return;
+    }
+    const field = g.replay.fine[i];
+    if (!field) return;
+    // One transparent cell of padding on every side: with smoothing on, the
+    // field fades out over ~2 km instead of ending in a hard rectangle.
+    const cw = gr.nlon + 2, ch = gr.nlat + 2;
+    rainImg.width = cw; rainImg.height = ch;
+    const img = rainCtx.createImageData(cw, ch);
+    for (let r = 0; r < gr.nlat; r++) for (let c = 0; c < gr.nlon; c++) {
+      const v = field[r * gr.nlon + c], o = ((gr.nlat - r) * cw + c + 1) * 4;  // north at top
+      if (v < 0.2) continue;
+      const px = rainRGBA(v); img.data[o] = px[0]; img.data[o + 1] = px[1]; img.data[o + 2] = px[2]; img.data[o + 3] = px[3];
+    }
+    rainCtx.putImageData(img, 0, 0);
+    const cx = (bx - ax) / gr.nlon, cy = (by - ay) / gr.nlat;
+    ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = "high";
+    ctx.drawImage(rainImg, ax - cx, ay - cy, bx - ax + 2 * cx, by - ay + 2 * cy);
+  }
+
+  function sensorRadius() { return 3.1 * Math.min(1.8, Math.sqrt(state.zoom)); }
+
+  function drawSensors(g, P, t) {
+    if (!state.sensors) return;
+    const i = state.frame, r = sensorRadius();
+    const pulse = reduceMotion ? 0.5 : 0.5 + 0.5 * Math.sin(t / 260);
+    for (const s of g.sensors) {
+      const [px, py] = P.f(s.x, s.y);
+      if (px < -10 || py < -10 || px > W + 10 || py > H + 10) continue;
+      const dev = s.dev[i];
+      ctx.beginPath(); ctx.arc(px, py, r, 0, Math.PI * 2);
+      if (dev == null) {
+        ctx.strokeStyle = s.speed[i] == null ? "rgba(106,124,142,0.35)" : "rgba(106,124,142,0.9)";
+        ctx.lineWidth = 1.4; ctx.stroke(); continue;
+      }
+      const c = sensorRGB(dev);
+      if (dev <= FLAG) {
+        ctx.save(); ctx.beginPath(); ctx.arc(px, py, r + 3 + 3 * pulse, 0, Math.PI * 2);
+        ctx.fillStyle = rgb(c, 0.16 + 0.14 * (1 - pulse)); ctx.fill(); ctx.restore();
+        ctx.beginPath(); ctx.arc(px, py, r, 0, Math.PI * 2);
+      }
+      ctx.fillStyle = rgb(c); ctx.fill();
+      ctx.lineWidth = 1; ctx.strokeStyle = "#0b1016"; ctx.stroke();
+      if (state.selected === s.id) { ctx.beginPath(); ctx.arc(px, py, r + 4, 0, Math.PI * 2); ctx.strokeStyle = "#f2f7ff"; ctx.lineWidth = 1.6; ctx.stroke(); }
+    }
+  }
+
+  let raf = 0;
+  function draw(t = performance.now()) {
+    const g = cache[state.city];
+    ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+    ctx.clearRect(0, 0, W, H);
+    if (!g || !W) return;
+    const P = project(g);
+    if (roadsDirty) drawRoads(g, P);
+    drawRain(g, P);
+    ctx.drawImage(roadLayer, 0, 0, W, H);
+    drawSensors(g, P, t);
+  }
+  function loop(t) {
+    draw(t);
+    raf = requestAnimationFrame(loop);
+  }
+
+  // ---------- rail ----------
+  function updateRail() {
+    const g = cache[state.city]; if (!g) return;
+    const i = state.frame, st = g.stats[i];
+    $("clock-time").textContent = g.replay.times[i];
+    $("clock-date").textContent = g.replay.label;
+    $("now-flag").innerHTML = "";
+    const f = document.createElement("span"); f.textContent = st.flag;
+    const sm = document.createElement("small"); sm.textContent = ` / ${st.withNormal}`;
+    $("now-flag").append(f, sm);
+    $("now-rain").firstChild.textContent = fmt1(st.rainMax);
+    $("now-rep").textContent = st.rep;
+    $("now-coarse").textContent = st.coarse == null ? "–" : `${fmt1(st.coarse)} mm/h`;
+    $("coarse-val").textContent = st.coarse == null ? "–" : `${fmt1(st.coarse)} mm/h`;
+
+    const slow = g.sensors.filter((s) => s.dev[i] != null && s.dev[i] < -0.03)
+      .sort((a, b) => a.dev[i] - b.dev[i]).slice(0, 6);
+    const ul = $("slow-list"); ul.replaceChildren();
+    if (!slow.length) { const li = document.createElement("li"); li.className = "empty"; li.textContent = "No sensor is running below normal."; ul.append(li); }
+    for (const s of slow) {
+      const li = document.createElement("li"); li.className = "clickable";
+      const nm = document.createElement("span"); nm.className = "name flag";
+      const d = document.createElement("span"); d.className = "dot"; d.style.background = rgb(sensorRGB(s.dev[i]));
+      const tx = document.createElement("span"); tx.textContent = s.road; tx.style.overflow = "hidden"; tx.style.textOverflow = "ellipsis";
+      nm.append(d, tx);
+      const v = document.createElement("span"); v.className = "val"; v.textContent = `${Math.round(s.speed[i])} km/h · ${pct(s.dev[i])}`;
+      li.append(nm, v); li.addEventListener("click", () => select(s.id));
+      ul.append(li);
+    }
+    if (state.selected) renderSelected();
+    $("tl-range").value = i;
+    drawTimelineHead();
+  }
+
+  function renderGaps() {
+    const g = cache[state.city]; const ul = $("gap-list"); ul.replaceChildren();
+    for (const gap of g.gaps.slice(0, 6)) {
+      const li = document.createElement("li"); li.className = "clickable" + (state.highlight === gap.name ? " on" : "");
+      li.tabIndex = 0; li.setAttribute("role", "button");
+      const nm = document.createElement("span"); nm.className = "name"; nm.textContent = gap.name;
+      const v = document.createElement("span"); v.className = "val"; v.textContent = `${(gap.len / 1000).toFixed(1)} km`;
+      li.append(nm, v);
+      const go = () => focusRoad(gap.name);
+      li.addEventListener("click", go); li.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); go(); } });
+      ul.append(li);
+    }
+  }
+
+  function focusRoad(name) {
+    const g = cache[state.city];
+    if (state.highlight === name) { state.highlight = null; resetView(); renderGaps(); return; }
+    state.highlight = name;
+    const es = g.edges.filter((e) => e.name === name && e.crit && !e.s);
+    if (es.length) {
+      let a = Infinity, b = -Infinity, c = Infinity, d = -Infinity;
+      for (const e of es) for (const [x, y] of e.pts) { a = Math.min(a, x); b = Math.max(b, x); c = Math.min(c, y); d = Math.max(d, y); }
+      const s0 = baseScale(g), bb = g.bounds;
+      const z = Math.max(1, Math.min(5, 0.55 * Math.min(W / ((b - a) * s0 || 1), H / ((d - c) * s0 || 1))));
+      state.zoom = z;
+      const s = s0 * z, cx = (bb.minX + bb.maxX) / 2, cy = (bb.minY + bb.maxY) / 2;
+      state.panX = -((a + b) / 2 - cx) * s; state.panY = ((c + d) / 2 - cy) * s;
+    }
+    roadsDirty = true; renderGaps(); draw();
+  }
+
+  function select(id) {
+    state.selected = state.selected === id ? null : id;
+    $("sel-card").hidden = !state.selected;
+    if (state.selected) renderSelected();
+    draw();
+  }
+
+  function renderSelected() {
+    const g = cache[state.city]; const s = g.sensors.find((x) => x.id === state.selected);
+    if (!s) { $("sel-card").hidden = true; state.selected = null; return; }
+    const box = $("sel"); box.replaceChildren();
+    const head = document.createElement("div"); head.className = "sel-head";
+    const h = document.createElement("h3"); h.textContent = s.road;
+    const close = document.createElement("button"); close.textContent = "Close"; close.addEventListener("click", () => select(s.id));
+    head.append(h, close);
+    const cap = document.createElement("div"); cap.style.cssText = "font-size:12.5px;color:var(--ink-2)";
+    const i = state.frame;
+    cap.textContent = s.speed[i] == null ? `Sensor ${s.id} · no reading at ${g.replay.times[i]}`
+      : `Sensor ${s.id} · ${Math.round(s.speed[i])} km/h now` + (s.normal[i] ? `, normal ${Math.round(s.normal[i])} km/h` : "");
+    box.append(head, cap, sparkline(g, s));
+    const k = document.createElement("div"); k.style.cssText = "display:flex;gap:14px;font-size:11.5px;color:var(--ink-3)";
+    k.innerHTML = '<span><i style="display:inline-block;width:12px;height:2px;background:#e6edf3;vertical-align:middle;margin-right:5px"></i>Speed</span><span><i style="display:inline-block;width:12px;border-top:1.5px dashed #9fb0c1;vertical-align:middle;margin-right:5px"></i>Normal</span><span><i style="display:inline-block;width:8px;height:8px;background:rgba(57,135,229,.6);vertical-align:middle;margin-right:5px"></i>Rain here</span>';
+    box.append(k);
+  }
+
+  function sparkline(g, s) {
+    const n = g.replay.times.length, w = 300, h = 110, pl = 28, pr = 6, pt = 8, pb = 18;
+    const vals = s.speed.concat(s.normal).filter((v) => v != null);
+    const hi = Math.max(10, ...vals) * 1.08, rmax = Math.max(4, ...s.rain.filter((v) => v != null));
+    const X = (i) => pl + (i / (n - 1)) * (w - pl - pr), Y = (v) => pt + (1 - v / hi) * (h - pt - pb);
+    const ns = "http://www.w3.org/2000/svg", svg = document.createElementNS(ns, "svg");
+    svg.setAttribute("viewBox", `0 0 ${w} ${h}`); svg.setAttribute("role", "img");
+    svg.setAttribute("aria-label", `Speed against normal through the day at ${s.road}`);
+    const el = (tag, at) => { const e = document.createElementNS(ns, tag); for (const k in at) e.setAttribute(k, at[k]); svg.append(e); return e; };
+    s.rain.forEach((v, i) => { if (v && v >= 0.1) { const bh = (v / rmax) * (h - pt - pb) * 0.6; el("rect", { x: X(i) - 1, y: h - pb - bh, width: 2.2, height: bh, fill: "rgba(57,135,229,0.55)" }); } });
+    [0, Math.round(hi / 2 / 10) * 10].forEach((v) => { el("line", { x1: pl, x2: w - pr, y1: Y(v), y2: Y(v), stroke: "#1f2b38", "stroke-width": 1 }); const t = el("text", { x: pl - 5, y: Y(v) + 3.5, "text-anchor": "end", fill: "#6a7c8e", "font-size": 9, "font-family": "IBM Plex Mono, monospace" }); t.textContent = v; });
+    const path = (arr) => { let d = "", on = false; arr.forEach((v, i) => { if (v == null) { on = false; return; } d += (on ? "L" : "M") + X(i).toFixed(1) + "," + Y(v).toFixed(1); on = true; }); return d; };
+    el("path", { d: path(s.normal), fill: "none", stroke: "#9fb0c1", "stroke-width": 1.5, "stroke-dasharray": "3 3" });
+    el("path", { d: path(s.speed), fill: "none", stroke: "#e6edf3", "stroke-width": 2, "stroke-linejoin": "round" });
+    el("line", { x1: X(state.frame), x2: X(state.frame), y1: pt, y2: h - pb, stroke: "#3987e5", "stroke-width": 1.2 });
+    [0, Math.floor(n / 3), Math.floor(2 * n / 3), n - 1].forEach((i) => { const t = el("text", { x: X(i), y: h - 4, "text-anchor": i === 0 ? "start" : i === n - 1 ? "end" : "middle", fill: "#6a7c8e", "font-size": 9, "font-family": "IBM Plex Mono, monospace" }); t.textContent = g.replay.times[i]; });
+    return svg;
+  }
+
+  // ---------- timeline ----------
+  const tl = $("tl-svg");
+  let TL = null;
+  function drawTimeline() {
+    const g = cache[state.city]; if (!g) return;
+    const w = Math.max(280, tl.parentElement.clientWidth), h = 118, pl = 34, pr = 8, n = g.stats.length;
+    const r0 = 6, r1 = 60, s0 = 72, s1 = 100;  // rain strip / slowdown strip
+    tl.setAttribute("viewBox", `0 0 ${w} ${h}`); tl.setAttribute("height", h);
+    tl.replaceChildren();
+    const ns = "http://www.w3.org/2000/svg";
+    const el = (tag, at, txt) => { const e = document.createElementNS(ns, tag); for (const k in at) e.setAttribute(k, at[k]); if (txt != null) e.textContent = txt; tl.append(e); return e; };
+    const X = (i) => pl + (i / (n - 1)) * (w - pl - pr);
+    const rmax = Math.max(1, ...g.stats.map((s) => Math.max(s.rainMean || 0, s.coarse || 0))) * 1.1;
+    const RY = (v) => r1 - (v / rmax) * (r1 - r0);
+    const SY = (v) => s1 - v * (s1 - s0) / 0.5;   // 0..50%
+    const mono = { fill: "#6a7c8e", "font-size": 10, "font-family": "IBM Plex Mono, monospace" };
+    el("line", { x1: pl, x2: w - pr, y1: r1, y2: r1, stroke: "#1f2b38" });
+    el("line", { x1: pl, x2: w - pr, y1: s1, y2: s1, stroke: "#1f2b38" });
+    el("text", { ...mono, x: pl - 6, y: r0 + 8, "text-anchor": "end" }, Math.round(rmax));
+    el("text", { ...mono, x: pl - 6, y: r1 + 3, "text-anchor": "end" }, "0");
+    el("text", { ...mono, x: pl - 6, y: s0 + 8, "text-anchor": "end" }, "50%");
+    el("text", { ...mono, x: pl + 4, y: r0 + 8 }, "mm/h");
+    const path = (key, Y) => { let d = "", on = false; g.stats.forEach((s, i) => { const v = s[key]; if (v == null) { on = false; return; } d += (on ? "L" : "M") + X(i).toFixed(1) + "," + Y(v).toFixed(1); on = true; }); return d; };
+    // slowdown share as an area
+    let area = "", on = false, start = 0;
+    g.stats.forEach((s, i) => {
+      if (s.share == null) { if (on) area += `L${X(i - 1).toFixed(1)},${s1}Z`; on = false; return; }
+      if (!on) { area += `M${X(i).toFixed(1)},${s1}`; start = i; }
+      area += `L${X(i).toFixed(1)},${SY(Math.min(0.5, s.share)).toFixed(1)}`; on = true;
+    });
+    if (on) area += `L${X(n - 1).toFixed(1)},${s1}Z`;
+    el("path", { d: area, fill: "rgba(230,103,103,0.45)", stroke: "#e66767", "stroke-width": 1 });
+    el("path", { d: path("coarse", RY), fill: "none", stroke: "#d95926", "stroke-width": 2, "stroke-linejoin": "round" });
+    el("path", { d: path("rainMean", RY), fill: "none", stroke: "#3987e5", "stroke-width": 2, "stroke-linejoin": "round" });
+    for (let i = 0; i < n; i += 12) el("text", { ...mono, x: X(i), y: h - 2, "text-anchor": "middle" }, g.replay.times[i]);
+    const head = el("g", {});
+    TL = { X, n, w, h, pl, pr, head, s1, r0 };
+    drawTimelineHead();
+  }
+  function drawTimelineHead() {
+    if (!TL) return;
+    const g = cache[state.city], x = TL.X(state.frame);
+    TL.head.replaceChildren();
+    const ns = "http://www.w3.org/2000/svg";
+    const ln = document.createElementNS(ns, "line");
+    Object.entries({ x1: x, x2: x, y1: 0, y2: TL.s1 + 2, stroke: "#f2f7ff", "stroke-width": 1.5 }).forEach(([k, v]) => ln.setAttribute(k, v));
+    const kn = document.createElementNS(ns, "circle");
+    Object.entries({ cx: x, cy: TL.s1 + 2, r: 4.5, fill: "#f2f7ff" }).forEach(([k, v]) => kn.setAttribute(k, v));
+    TL.head.append(ln, kn);
+  }
+  function frameFromEvent(e) {
+    const r = tl.getBoundingClientRect(), sx = (e.clientX - r.left) * (TL.w / r.width);
+    return Math.max(0, Math.min(TL.n - 1, Math.round(((sx - TL.pl) / (TL.w - TL.pl - TL.pr)) * (TL.n - 1))));
+  }
+  let scrubbing = false;
+  tl.addEventListener("pointerdown", (e) => { if (!TL) return; scrubbing = true; tl.setPointerCapture(e.pointerId); setPlaying(false); setFrame(frameFromEvent(e)); });
+  tl.addEventListener("pointermove", (e) => { if (scrubbing) setFrame(frameFromEvent(e)); });
+  tl.addEventListener("pointerup", () => { scrubbing = false; });
+  $("tl-range").addEventListener("input", (e) => setFrame(+e.target.value));
+
+  // ---------- playback ----------
+  let timer = 0;
+  function setFrame(i) { state.frame = i; updateRail(); draw(); }
+  function setPlaying(p) {
+    state.playing = p;
+    $("play").setAttribute("aria-label", p ? "Pause storm replay" : "Play storm replay");
+    $("play-icon").innerHTML = p ? '<path d="M5 3h4v14H5zM11 3h4v14h-4z"/>' : '<path d="M5 3l12 7-12 7z"/>';
+    clearInterval(timer);
+    if (p) timer = setInterval(() => { const g = cache[state.city]; setFrame((state.frame + 1) % g.stats.length); }, 260);
+  }
+  $("play").addEventListener("click", () => setPlaying(!state.playing));
+  document.addEventListener("keydown", (e) => {
+    if (e.target.closest("input, button, [role=button]") && e.key === " ") return;
+    const g = cache[state.city]; if (!g) return;
+    if (e.key === " ") { e.preventDefault(); setPlaying(!state.playing); }
+    if (e.key === "ArrowRight") setFrame(Math.min(g.stats.length - 1, state.frame + 1));
+    if (e.key === "ArrowLeft") setFrame(Math.max(0, state.frame - 1));
+  });
+
+  // ---------- map interaction ----------
+  const tip = $("map-tip");
+  let drag = null;
+  function nearestSensor(g, P, mx, my) {
+    let best = null, bd = 10;
+    if (!state.sensors) return null;
+    for (const s of g.sensors) { const [px, py] = P.f(s.x, s.y); const d = Math.hypot(px - mx, py - my); if (d < bd) { bd = d; best = s; } }
+    return best;
+  }
+  function nearestRoad(g, P, mx, my) {
+    let best = null, bd = 6;
+    for (let k = g.edges.length - 1; k >= 0; k--) {
+      const e = g.edges[k];
+      for (let j = 1; j < e.pts.length; j++) {
+        const [ax, ay] = P.f(...e.pts[j - 1]), [bx, by] = P.f(...e.pts[j]);
+        const dx = bx - ax, dy = by - ay, L = dx * dx + dy * dy;
+        const t = L ? Math.max(0, Math.min(1, ((mx - ax) * dx + (my - ay) * dy) / L)) : 0;
+        const d = Math.hypot(ax + t * dx - mx, ay + t * dy - my);
+        if (d < bd) { bd = d; best = e; }
+      }
+    }
+    return best;
+  }
+  function showTip(html, mx, my) {
+    tip.innerHTML = html; tip.hidden = false;
+    const tw = tip.offsetWidth, th = tip.offsetHeight;
+    tip.style.left = Math.min(W - tw - 8, mx + 14) + "px";
+    tip.style.top = Math.max(8, Math.min(H - th - 8, my - th - 10)) + "px";
+  }
+  const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+  canvas.addEventListener("pointermove", (e) => {
+    const g = cache[state.city]; if (!g) return;
+    const r = canvas.getBoundingClientRect(), mx = e.clientX - r.left, my = e.clientY - r.top;
+    if (drag) { state.panX = drag.px + (mx - drag.x); state.panY = drag.py + (my - drag.y); roadsDirty = true; draw(); tip.hidden = true; return; }
+    const P = project(g), i = state.frame;
+    const s = nearestSensor(g, P, mx, my);
+    if (s) {
+      const dev = s.dev[i];
+      const line = s.speed[i] == null ? "No reading at this time" :
+        `<span class="v">${Math.round(s.speed[i])} km/h</span>` + (s.normal[i] ? ` · normal <span class="v">${Math.round(s.normal[i])}</span>` : "") + (dev != null ? ` · <span class="v">${pct(dev)}</span>` : " · no normal for this hour");
+      showTip(`<strong>${esc(s.road)}</strong>${line}<br>Rain here: <span class="v">${fmt1(s.rain[i])} mm/h</span><br><span style="color:var(--ink-3)">Click to follow this sensor</span>`, mx, my);
+      canvas.style.cursor = "pointer"; return;
+    }
+    const road = nearestRoad(g, P, mx, my);
+    if (road) {
+      const top = Math.round((1 - road.rank) * 100);
+      showTip(`<strong>${esc(road.name || "Unnamed " + road.cls)}</strong>${esc(road.cls)} · ${top <= 1 ? "among the most critical roads" : `top ${top}% by importance`}<br>${road.s ? "Has a sensor" : road.crit ? '<span style="color:#a99ff0">Critical road with no sensor</span>' : "No sensor"}`, mx, my);
+      canvas.style.cursor = "grab"; return;
+    }
+    tip.hidden = true; canvas.style.cursor = "grab";
+  });
+  canvas.addEventListener("pointerleave", () => { tip.hidden = true; });
+  canvas.addEventListener("pointerdown", (e) => {
+    const r = canvas.getBoundingClientRect();
+    drag = { x: e.clientX - r.left, y: e.clientY - r.top, px: state.panX, py: state.panY, moved: false };
+    canvas.setPointerCapture(e.pointerId); canvas.classList.add("dragging");
+  });
+  canvas.addEventListener("pointerup", (e) => {
+    const r = canvas.getBoundingClientRect(), mx = e.clientX - r.left, my = e.clientY - r.top;
+    const moved = drag && Math.hypot(mx - drag.x, my - drag.y) > 4;
+    drag = null; canvas.classList.remove("dragging");
+    if (!moved) { const g = cache[state.city]; const s = g && nearestSensor(g, project(g), mx, my); if (s) select(s.id); }
+  });
+  canvas.addEventListener("dblclick", (e) => { const r = canvas.getBoundingClientRect(); zoomAt(1.6, e.clientX - r.left, e.clientY - r.top); });
+  function zoomAt(f, mx = W / 2, my = H / 2) {
+    const z = Math.max(1, Math.min(8, state.zoom * f)), k = z / state.zoom;
+    state.panX = mx - W / 2 - (mx - W / 2 - state.panX) * k;
+    state.panY = my - H / 2 - (my - H / 2 - state.panY) * k;
+    state.zoom = z; roadsDirty = true; draw();
+  }
+  function resetView() { state.zoom = 1; state.panX = 0; state.panY = 0; roadsDirty = true; draw(); }
+  $("zoom-in").addEventListener("click", () => zoomAt(1.5));
+  $("zoom-out").addEventListener("click", () => zoomAt(1 / 1.5));
+  $("zoom-reset").addEventListener("click", () => { state.highlight = null; renderGaps(); resetView(); });
+
+  // ---------- layer toggles ----------
+  document.querySelectorAll("[data-rain]").forEach((b) => b.addEventListener("click", () => {
+    state.rain = b.dataset.rain;
+    document.querySelectorAll("[data-rain]").forEach((x) => x.setAttribute("aria-pressed", String(x === b)));
+    $("coarse-note").hidden = state.rain !== "coarse"; draw();
+  }));
+  const toggle = (id, key) => $(id).addEventListener("click", () => { state[key] = !state[key]; $(id).setAttribute("aria-pressed", String(state[key])); roadsDirty = true; draw(); });
+  toggle("show-sensors", "sensors"); toggle("show-gaps", "gaps");
+
+  // ---------- city switch ----------
+  async function setCity(city) {
+    state.city = city; state.highlight = null; state.selected = null; $("sel-card").hidden = true;
+    document.querySelectorAll("[data-city]").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.city === city)));
+    $("map-loading").hidden = false; $("map-loading").textContent = `Loading ${CITY_NAMES[city]}`;
+    try {
+      const g = await loadCity(city);
+      if (state.city !== city) return;
+      $("map-loading").hidden = true;
+      state.zoom = 1; state.panX = 0; state.panY = 0; roadsDirty = true;
+      state.frame = g.startFrame;
+      $("tl-range").max = g.stats.length - 1;
+      renderGaps(); drawTimeline(); updateRail(); draw();
+    } catch (err) {
+      $("map-loading").textContent = `Could not load ${CITY_NAMES[city]} (${err.message}). Reload the page to try again.`;
+    }
+  }
+  document.querySelectorAll("[data-city]").forEach((b) => b.addEventListener("click", () => setCity(b.dataset.city)));
+
+  // ---------- evidence ----------
+  function renderCoverage() {
+    const box = $("cov"); box.replaceChildren();
+    for (const city of ["manchester", "torino", "essen"]) {
+      const c = summary.coverage[city];
+      const d = document.createElement("div"); d.className = "city";
+      const covKm = c.critical_km * c.critical_covered_pct / 100;
+      d.innerHTML = `<h3>${CITY_NAMES[city]}</h3>
+        <div class="pct">${c.critical_covered_pct.toFixed(0)}%<small>of critical road length has a sensor</small></div>
+        <div class="bar" role="img" aria-label="${covKm.toFixed(1)} of ${c.critical_km} km monitored"><i style="width:${c.critical_covered_pct}%"></i></div>
+        <div class="meta">${covKm.toFixed(1)} of ${c.critical_km} km critical road monitored · ${c.road_km.toLocaleString()} km of main road, ${c.sensors} sensors</div>`;
+      const ol = document.createElement("ol");
+      c.top_gaps.slice(0, 3).forEach((gp) => { const li = document.createElement("li"); li.textContent = `${gp.name}, ${(gp.len / 1000).toFixed(1)} km unmonitored`; ol.append(li); });
+      d.append(ol); box.append(d);
+    }
+  }
+
+  function chartTip(container) { let t = container.querySelector(".tip"); if (!t) { t = document.createElement("div"); t.className = "tip"; t.hidden = true; container.append(t); } return t; }
+
+  function renderEffects() {
+    const box = $("eff"); const old = box.querySelector("svg"); if (old) old.remove();
+    const bands = [["Light", "0.1–0.5 mm/h"], ["Moderate", "0.5–4"], ["Heavy", "4–10"], ["Extreme", "over 10"]];
+    const rows = bands.map(([b, r]) => ({ b, r, e: summary.effects.find((x) => x.view === "congested" && x.level === "free-flowing" && x.band === b && x.measure === "speed") }));
+    const w = Math.max(300, box.clientWidth), h = 250, pl = 46, pr = 12, pt = 14, pb = 44;
+    const lo = Math.min(-6, ...rows.map((r) => r.e.lo)), hi = Math.max(2, ...rows.map((r) => r.e.hi));
+    const Y = (v) => pt + (hi - v) / (hi - lo) * (h - pt - pb);
+    const X = (i) => pl + (i + 0.5) * (w - pl - pr) / rows.length;
+    const ns = "http://www.w3.org/2000/svg", svg = document.createElementNS(ns, "svg");
+    svg.setAttribute("viewBox", `0 0 ${w} ${h}`); svg.setAttribute("role", "img");
+    svg.setAttribute("aria-label", "Speed change on free-flowing roads by rain band: " + rows.map((r) => `${r.b} ${r.e.est.toFixed(1)}%`).join(", "));
+    const el = (tag, at, txt) => { const e = document.createElementNS(ns, tag); for (const k in at) e.setAttribute(k, at[k]); if (txt != null) e.textContent = txt; svg.append(e); return e; };
+    const mono = { fill: "#6a7c8e", "font-size": 10.5, "font-family": "IBM Plex Mono, monospace" };
+    for (let v = Math.ceil(lo / 2) * 2; v <= hi; v += 2) {
+      el("line", { x1: pl, x2: w - pr, y1: Y(v), y2: Y(v), stroke: v === 0 ? "#3a4b5e" : "#18222d", "stroke-width": v === 0 ? 1.4 : 1 });
+      el("text", { ...mono, x: pl - 8, y: Y(v) + 3.5, "text-anchor": "end" }, (v > 0 ? "+" : "") + v + "%");
+    }
+    const tipEl = chartTip(box);
+    rows.forEach((r, i) => {
+      const x = X(i), clear = r.e.hi < 0 || r.e.lo > 0;
+      el("line", { x1: x, x2: x, y1: Y(r.e.lo), y2: Y(r.e.hi), stroke: "#8fb0cf", "stroke-width": 2, "stroke-linecap": "round" });
+      [r.e.lo, r.e.hi].forEach((v) => el("line", { x1: x - 7, x2: x + 7, y1: Y(v), y2: Y(v), stroke: "#8fb0cf", "stroke-width": 2, "stroke-linecap": "round" }));
+      el("circle", { cx: x, cy: Y(r.e.est), r: 6, fill: clear ? "#f2f7ff" : "#111922", stroke: "#f2f7ff", "stroke-width": 2 });
+      el("text", { x: x + 12, y: Y(r.e.est) + 4, fill: "#e6edf3", "font-size": 12, "font-family": "IBM Plex Mono, monospace" }, (r.e.est > 0 ? "+" : "") + r.e.est.toFixed(1) + "%");
+      el("text", { x, y: h - pb + 18, "text-anchor": "middle", fill: "#e6edf3", "font-size": 12.5, "font-family": "Public Sans, sans-serif", "font-weight": 600 }, r.b);
+      el("text", { ...mono, x, y: h - pb + 33, "text-anchor": "middle" }, r.r);
+      const hit = el("rect", { x: x - (w - pl - pr) / rows.length / 2, y: pt, width: (w - pl - pr) / rows.length, height: h - pt - pb, fill: "transparent" });
+      hit.addEventListener("pointerenter", () => {
+        tipEl.innerHTML = `<strong>${r.b} rain (${r.r})</strong>Speed vs normal: <span class="v">${r.e.est.toFixed(1)}%</span><br>95% interval: <span class="v">${r.e.lo.toFixed(1)}% to ${r.e.hi.toFixed(1)}%</span><br>${r.e.days.toLocaleString()} sensor-days of this rain${clear ? "" : "<br>Within normal variation"}`;
+        tipEl.hidden = false;
+        tipEl.style.left = Math.min(box.clientWidth - tipEl.offsetWidth - 4, Math.max(0, x / w * box.clientWidth - tipEl.offsetWidth / 2)) + "px";
+        tipEl.style.top = Math.max(0, Y(r.e.lo) / h * svg.clientHeight + 10) + "px";
+      });
+      hit.addEventListener("pointerleave", () => { tipEl.hidden = true; });
+    });
+    box.prepend(svg);
+  }
+
+  function renderAblation() {
+    const box = $("abl"); const old = box.querySelector("svg"); if (old) old.remove();
+    const a = summary.ablation.all;
+    const rows = [["Assume normal speed", a.rmse.zero], ["Model, no rain data", a.rmse.none], ["+ 31 km rain", a.rmse.coarse], ["+ 2 km rain", a.rmse.fine]];
+    const w = Math.max(280, box.clientWidth), rh = 34, h = rows.length * rh + 26, pl = Math.min(150, w * 0.42), pr = 54;
+    const max = Math.ceil(Math.max(...rows.map((r) => r[1])) / 10) * 10;
+    const X = (v) => pl + (v / max) * (w - pl - pr);
+    const ns = "http://www.w3.org/2000/svg", svg = document.createElementNS(ns, "svg");
+    svg.setAttribute("viewBox", `0 0 ${w} ${h}`); svg.setAttribute("role", "img");
+    svg.setAttribute("aria-label", "Prediction error: " + rows.map((r) => `${r[0]} ${r[1]}`).join(", "));
+    const el = (tag, at, txt) => { const e = document.createElementNS(ns, tag); for (const k in at) e.setAttribute(k, at[k]); if (txt != null) e.textContent = txt; svg.append(e); return e; };
+    for (let v = 0; v <= max; v += 10) {
+      el("line", { x1: X(v), x2: X(v), y1: 0, y2: rows.length * rh, stroke: "#18222d" });
+      el("text", { x: X(v), y: h - 6, "text-anchor": "middle", fill: "#6a7c8e", "font-size": 10.5, "font-family": "IBM Plex Mono, monospace" }, v);
+    }
+    rows.forEach(([lab, v], i) => {
+      const y = i * rh + 7;
+      el("text", { x: pl - 10, y: y + 14, "text-anchor": "end", fill: "#e6edf3", "font-size": 12.5, "font-family": "Public Sans, sans-serif" }, lab);
+      el("rect", { x: pl, y, width: X(v) - pl, height: 20, rx: 4, fill: i === 0 ? "#3c5470" : "#8fb0cf" });
+      el("text", { x: X(v) + 6, y: y + 14.5, fill: "#e6edf3", "font-size": 12, "font-family": "IBM Plex Mono, monospace" }, v.toFixed(1));
+    });
+    box.prepend(svg);
+    const imp = a.improvement;
+    $("abl-note").textContent = `Error is in percentage points of speed. Adding rain moved it by ${Math.abs(imp.coarse_vs_none.estimate).toFixed(1)} (31 km) and ${Math.abs(imp.fine_vs_none.estimate).toFixed(1)} (2 km) out of about 31, and neither change held up statistically. Everyday variation in traffic outweighs rain, so the monitor compares each road with its normal and flags what stands out.`;
+  }
+
+  function renderPipeline() {
+    const p = summary.pipeline;
+    const roadKm = Object.values(summary.coverage).reduce((s, c) => s + c.road_km, 0);
+    const steps = [[p.raw_readings, "readings scanned across 40 cities"], [p.study_readings, "readings in the three study cities"],
+                   [p.curated_readings, "readings left after quality checks"], [p.analysed_readings, "readings with a dry-weather normal to compare against"],
+                   [p.sensors, `sensors on ${Math.round(roadKm).toLocaleString()} km of mapped main road`]];
+    const ol = $("pipe"); ol.replaceChildren();
+    for (const [n, c] of steps) { const li = document.createElement("li"); li.innerHTML = `<div class="n">${n.toLocaleString()}</div><div class="c">${c}</div>`; ol.append(li); }
+  }
+
+  // ---------- boot ----------
+  new ResizeObserver(() => { resize(); drawTimeline(); }).observe($("map"));
+  let evW = 0;
+  new ResizeObserver(() => { if (!summary) return; const w = $("eff").clientWidth; if (w !== evW) { evW = w; renderEffects(); renderAblation(); } }).observe(document.querySelector(".evidence"));
+  getJSON("summary.json").then((s) => {
+    summary = s;
+    renderCoverage(); renderEffects(); renderAblation(); renderPipeline();
+    return setCity("torino");
+  }).then(() => { if (!reduceMotion) raf = requestAnimationFrame(loop); })
+    .catch((err) => { $("map-loading").textContent = `Could not load the monitor data (${err.message}).`; });
+})();
+</script>
