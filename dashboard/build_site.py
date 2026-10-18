@@ -15,6 +15,7 @@ SRC, DATA, OUT = ROOT / "dashboard" / "index.html", ROOT / "export" / "dashboard
 BASE = """<meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="description" content="Rain-aware traffic monitor for Torino, Manchester and Essen.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230b1016'/%3E%3Cpath d='M6 24 L14 12 L19 18 L26 7' stroke='%23e5484d' stroke-width='3' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3Ccircle cx='9' cy='9' r='2.5' fill='%233987e5'/%3E%3C/svg%3E">
 <style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
 body{margin:0}img{max-width:100%}[hidden]{display:none!important}</style>
 """
@@ -30,4 +31,6 @@ if not files:
     raise SystemExit("FAIL: no data in export/dashboard; run raincheck.dashboard.export_dashboard first")
 for f in files:
     shutil.copy2(f, OUT / f.name)
+# `vercel link` drops a token file here; never upload it with the site.
+(OUT / ".vercelignore").write_text(".env*\n.gitignore\n.vercel\n")
 print(f"wrote {OUT}: index.html + {len(files)} data files")
